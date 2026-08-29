@@ -1,0 +1,88 @@
+name: us-stock-selection-basket
+template_source: us-stock-selection-basket
+display_name: "US Stock Selection Basket"
+display_name_i18n:
+  en: "US Stock Selection Basket"
+  zh: "美股精选篮子"
+  zh-tw: "美股精選籃子"
+  es: "Cesta de selección de acciones de EE. UU."
+  ja: "米国株選択バスケット"
+  vi: "Rổ lựa chọn cổ phiếu Mỹ"
+version: "1.0.0"
+description: "Non-trading RWA US stock watchlist basket for testing selection_basket flows"
+description_i18n:
+  en: "Non-trading RWA US stock watchlist basket for testing selection_basket flows"
+  zh: "用于测试 selection_basket 流程的 RWA 美股观察篮子，仅发信号"
+  zh-tw: "用於測試 selection_basket 流程的 RWA 美股觀察籃子，僅發訊號"
+  es: "Cesta de seguimiento de acciones RWA de EE. UU. solo de señales para probar flujos selection_basket"
+  ja: "selection_basket フロー検証用のシグナル専用RWA米国株ウォッチリストバスケット"
+  vi: "Rổ theo dõi cổ phiếu Mỹ RWA chỉ phát tín hiệu để kiểm thử luồng selection_basket"
+long_description: |
+  This Playbook is a non-trading selection basket for Bitget RWA US stock spot
+  markets. It is designed to test the callout product path rather than to
+  automate trading. The thesis is that a compact basket of liquid, familiar
+  large-cap equity tokens is useful for validating how the platform stores,
+  refreshes, and displays watchlist recommendations. Each run ranks a fixed
+  candidate universe by a simple quality-growth preference and emits the top
+  candidates as structured basket rows.
+
+  Entry is a research publication event, not an order event. When the Playbook
+  runs, it selects names that combine durable franchise quality, broad investor
+  attention, and clear thematic exposure. The output is a managed watch signal
+  whose metadata contains the selected assets, reference prices, targets, stop
+  levels, thesis text, and risk text. Subscribers should read the basket as a
+  current shortlist for review, not as an instruction to open positions.
+
+  Exit is replacement by the next completed run. There is no position lifecycle,
+  no close order, and no stop execution inside this package. A later run may
+  publish a different basket, revise the risk notes, or remove a name when its
+  relative rank weakens. The previous basket remains useful as historical
+  context for product breadth statistics, but it is not managed like an open
+  trade.
+
+  Subscribers may tune the maximum number of assets included in the basket.
+  A smaller setting makes the output more selective, while a larger setting
+  keeps more of the same ranked universe visible. This parameter changes the
+  display breadth only; it does not change sizing, leverage, order behavior, or
+  account risk because the package never places trades.
+
+  The Playbook underperforms as a decision aid when broad equity sentiment
+  changes faster than a scheduled watchlist can refresh, when RWA token
+  liquidity is thin, or when single-name news overwhelms the simple ranking.
+  The prices in this test package are illustrative fixtures for platform QA,
+  not live quotes or performance promises. Treat the emitted basket as a
+  structured test artifact and research prompt that still requires independent
+  judgment before any separate trading decision.
+
+market_type: spot
+trading_symbols:
+  - RAAPLUSDT
+  - RNVDAUSDT
+  - RTSLAUSDT
+  - RMSFTUSDT
+  - RGOOGLUSDT
+  - RMETAUSDT
+  - RAMZNUSDT
+tags: ["selection-basket", "callout", "rwa", "us-stocks", "test"]
+
+output_kind: selection_basket
+decision_mode: deterministic
+backtest_support: none
+runtime_profile: deterministic
+follow_trade_supported: false
+official_evidence_kind: paper
+
+schedule:
+  cron: "0 */4 * * *"
+  tz: "Asia/Shanghai"
+
+strategy_config:
+  max_assets: 5
+
+user_config_schema:
+  max_assets:
+    type: integer
+    default: 5
+    min: 1
+    max: 7
+    label: "Maximum basket assets"

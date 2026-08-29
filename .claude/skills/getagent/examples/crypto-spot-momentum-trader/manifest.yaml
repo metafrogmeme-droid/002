@@ -1,0 +1,133 @@
+name: crypto-spot-momentum-trader
+template_source: crypto-spot-momentum-trader
+display_name: "Crypto Spot Momentum Trader"
+display_name_i18n:
+  en: "Crypto Spot Momentum Trader"
+  zh: "加密现货动量交易策略"
+  zh-tw: "加密現貨動量交易策略"
+  es: "Estrategia de momentum spot cripto"
+  ja: "暗号資産スポット・モメンタム戦略"
+  vi: "Chiến lược động lượng spot crypto"
+version: "1.0.0"
+description: "Follow-trade capable crypto spot momentum strategy for BGB"
+description_i18n:
+  en: "Follow-trade capable crypto spot momentum strategy for BGB"
+  zh: "支持跟单的 BGB 加密现货动量策略"
+  zh-tw: "支援跟單的 BGB 加密現貨動量策略"
+  es: "Estrategia de momentum spot cripto para BGB con soporte de follow-trade"
+  ja: "BGB向けのフォロートレード対応暗号資産スポット・モメンタム戦略"
+  vi: "Chiến lược động lượng spot crypto cho BGB có hỗ trợ follow-trade"
+long_description: |
+  This Playbook is a crypto spot momentum strategy for liquid USDT pairs. It is
+  designed to capture periods when one major spot asset is leading the small
+  universe with clean upward follow-through while avoiding weaker or more
+  unstable alternatives. The strategy focuses on exchange-native Bitget spot
+  symbols and uses recent spot candle behavior to choose the candidate with the
+  strongest combination of positive momentum and controlled pullback.
+
+  Entry occurs only when the selected asset shows a constructive trend profile.
+  The Playbook compares the latest price with an earlier reference point,
+  checks whether the recent path has avoided an excessive drawdown, and then
+  emits a long signal for the strongest eligible symbol. In follow-trade mode,
+  the managed runtime may place a spot market buy using the configured quote
+  budget. The platform trade-permission gate remains authoritative for every
+  live execution.
+
+  Exit is deliberately conservative for this first spot version. If the universe
+  no longer has a qualifying leader, the Playbook emits a hold signal and does
+  not add exposure. It does not place stop-loss, take-profit, or forced sell
+  orders. A future scheduled run can rotate into a different strongest asset
+  when conditions change, but this package avoids frequent churn and avoids
+  pretending that spot inventory can be managed like a perpetual futures
+  position.
+
+  Subscribers can tune the tradable symbol list, the quote budget used for a
+  follow-trade buy, the qualitative lookback depth, the minimum momentum needed
+  before a signal becomes actionable, and the maximum tolerated pullback. The
+  margin budget field is included for platform return-denominator consistency,
+  while spot order sizing itself uses the quote budget and Bitget spot
+  instrument rules.
+
+  The strategy underperforms in sideways markets where short bursts quickly
+  reverse, in broad selloffs where every candidate loses momentum together, and
+  during thin-liquidity windows where a market order can receive poor execution.
+  It can also miss mean-reversion rallies because it waits for confirmation
+  instead of buying deep weakness. Past strength is not a guarantee of future
+  return, and live spot execution can be affected by slippage, fees, symbol
+  outages, and account-level constraints.
+
+market_type: spot
+trading_symbols: ["BGBUSDT"]
+tags: ["crypto", "spot", "momentum", "backtest", "follow-trade"]
+
+output_kind: trade_strategy
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+
+schedule:
+  cron: "0 */4 * * *"
+  tz: "Asia/Shanghai"
+
+strategy_config:
+  trading_symbols: ["BGBUSDT"]
+  budget_usdt: "5"
+  margin_budget: "100"
+  lookback_candles: 48
+  fast_period: 12
+  slow_period: 26
+  min_momentum_pct: "1.0"
+  max_drawdown_pct: "8.0"
+  force_live_long_for_testing: true
+
+user_config_schema:
+  trading_symbols:
+    type: array
+    item_type: string
+    default: ["BGBUSDT"]
+    options: ["BGBUSDT"]
+    aliases:
+      bgb: BGBUSDT
+    min_items: 1
+    max_items: 1
+    label: "Spot symbols"
+  budget_usdt:
+    type: string
+    default: "5"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Spot buy budget USDT"
+  margin_budget:
+    type: string
+    default: "100"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Return denominator USDT"
+  lookback_candles:
+    type: integer
+    default: 48
+    min: 12
+    max: 90
+    label: "Momentum lookback candles"
+  fast_period:
+    type: integer
+    default: 12
+    min: 3
+    max: 30
+    label: "Fast EMA period"
+  slow_period:
+    type: integer
+    default: 26
+    min: 10
+    max: 80
+    label: "Slow EMA period"
+  min_momentum_pct:
+    type: string
+    default: "1.0"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Minimum momentum percent"
+  max_drawdown_pct:
+    type: string
+    default: "8.0"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Maximum tolerated pullback percent"

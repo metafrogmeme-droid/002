@@ -1,0 +1,36 @@
+venue:
+  name: BITGET
+  account_type: CASH
+  oms_type: NETTING
+  starting_balances:
+    - amount: 100000
+      currency: USDT
+
+strategy:
+  module: strategy
+  class: SpotEmaMomentumStrategy
+  config_class: SpotEmaMomentumStrategyConfig
+  config:
+    order_id_tag: "spot-momentum-001"
+    trade_size: "10"
+    fast_period: 12
+    slow_period: 26
+
+execution:
+  start: "2026-03-19T00:00:00Z"
+  end: "2026-06-17T00:00:00Z"
+
+instrument:
+  id: BGBUSDT.BITGET
+  kind: spot
+  raw_symbol: BGBUSDT
+  base_currency: BGB
+  quote_currency: USDT
+  price_precision: 4
+  size_precision: 2
+  price_increment: "0.0001"
+  size_increment: "0.01"
+  lot_size: "0.01"
+  maker_fee: "0.001"
+  taker_fee: "0.001"
+  bar_type: BGBUSDT.BITGET-4-HOUR-LAST-EXTERNAL

@@ -1,0 +1,78 @@
+name: selection-basket-demo
+template_source: selection-basket-demo
+display_name: "Selection Basket Demo"
+display_name_i18n:
+  en: "Selection Basket Demo"
+  zh: "选篮子演示"
+  zh-tw: "選籃子示範"
+  es: "Demo de cesta de selección"
+  ja: "選択バスケットデモ"
+  vi: "Demo rổ lựa chọn"
+version: "1.0.0"
+description: "Non-trading demo that emits a two-asset crypto watchlist basket"
+description_i18n:
+  en: "Non-trading demo that emits a two-asset crypto watchlist basket"
+  zh: "仅发信号的演示，会输出两个加密资产的观察篮子"
+  zh-tw: "僅發出訊號的示範，會輸出兩個加密資產的觀察籃子"
+  es: "Demo solo de señales que emite una cesta de seguimiento con dos criptoactivos"
+  ja: "2つの暗号資産ウォッチリストを出力するシグナル専用デモ"
+  vi: "Demo chỉ phát tín hiệu với rổ theo dõi gồm hai tài sản crypto"
+long_description: |
+  This Playbook is a non-trading callout basket that demonstrates how to publish
+  a daily watchlist instead of an auto-trading strategy. It is designed for
+  subscribers who want a compact list of assets to inspect, not a set of orders
+  to follow. The package emits a managed signal whose metadata contains today's
+  basket, and the platform stores that basket for product display.
+
+  The entry concept is a watchlist refresh. On each scheduled run, the Playbook
+  selects a small number of liquid crypto assets and explains why each asset is
+  worth monitoring. It does not open positions and does not ask the runtime to
+  place orders. The signal action stays at watch so users can consume the basket
+  as research context.
+
+  The exit concept is simply replacement by the next run. A future scheduled
+  execution may emit a different basket or a different risk note, and the
+  product surface will show the latest completed snapshot. There is no trade
+  lifecycle, no position close, and no stop execution because this package is a
+  callout product rather than a follow-trade product.
+
+  Subscribers may tune the maximum number of assets included in the demo basket.
+  Lower values make the watchlist more selective, while higher values give a
+  broader sample of the same fixed candidate set. The parameter changes display
+  breadth only; it does not change trade sizing or order behavior because the
+  package never trades.
+
+  This demo underperforms as a trading system because it is intentionally not a
+  trading system. The reference and target prices are illustrative demo values,
+  not live market quotes or performance promises. Real callout Playbooks should
+  fetch current context through documented getagent.data endpoints, explain the
+  basis of each pick, and clearly state that basket inclusion is not a guarantee
+  of future return. Treat the emitted basket as a structured research note:
+  useful for discovery and comparison, but always requiring human review before
+  any separate trading decision.
+
+market_type: spot
+trading_symbols: ["BTCUSDT", "ETHUSDT"]
+tags: ["selection-basket", "callout", "demo", "crypto"]
+
+output_kind: selection_basket
+decision_mode: deterministic
+backtest_support: none
+runtime_profile: deterministic
+follow_trade_supported: false
+official_evidence_kind: paper
+
+schedule:
+  cron: "0 */4 * * *"
+  tz: "Asia/Shanghai"
+
+strategy_config:
+  max_assets: 2
+
+user_config_schema:
+  max_assets:
+    type: integer
+    default: 2
+    min: 1
+    max: 2
+    label: "Maximum assets"

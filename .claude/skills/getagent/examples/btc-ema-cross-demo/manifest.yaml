@@ -1,0 +1,93 @@
+name: btc-ema-cross-demo
+display_name: "BTC EMA Crossover Demo"
+version: "1.0.1"
+template_source: btc-ema-cross-demo
+description: "Trend-following BTC perpetual demo using EMA crossover on hourly bars"
+long_description: |
+  This Playbook is a trend-following strategy on BTC perpetual futures that
+  aims to capture the middle portion of sustained directional moves. The
+  thesis is simple: once the broader market commits to a real trend, price
+  tends to travel along that direction in a relatively clean way rather
+  than chopping back and forth. The Playbook deliberately ignores fade
+  setups and range-bound conditions and only acts when a crossover event
+  signals that a fresh directional regime has formed. It is designed for
+  subscribers who want a transparent, easy-to-explain signal source rather
+  than a black-box model.
+
+  Entry decisions are driven by alignment between a shorter-horizon and a
+  longer-horizon directional read of price action. When the shorter
+  horizon clearly leads the longer horizon upward, the strategy treats
+  that as bullish alignment and enters long. When the shorter horizon
+  drops below the longer horizon, it treats that as bearish alignment and
+  enters short. The strategy waits for the crossover to happen rather
+  than anticipating it, accepting some delay in exchange for clearer
+  confirmation.
+
+  Exits work by inversion. When the shorter horizon retracts back through
+  the longer horizon, the strategy reads that as fading conviction and
+  closes the position to lock in whatever was captured. The Playbook does
+  not use a separate stop loss or take profit in this demo; the crossover
+  itself is both the exit gate and the regret-control mechanism. Many
+  small losing trades are treated as the cost of catching the occasional
+  larger trend run.
+
+  Subscribers may tune two parameters. Leverage amplifies both upside and
+  drawdown equally; raising leverage does not make the strategy more
+  selective, it only sizes risk larger. Margin budget is the per-strategy
+  capital cap that the platform sizes orders against and uses as the
+  denominator for return percentage; treat it as the maximum amount you
+  are willing to put at risk on this Playbook.
+
+  The strategy underperforms in choppy, range-bound markets where the
+  shorter horizon flips repeatedly without committing to a real trend,
+  producing whipsaw losses. Gap-driven moves around major news events and
+  persistent funding-rate dislocation can also create a string of trapped
+  positions. Past historical backtest performance is not a guarantee of
+  live profitability, and live execution will pay slippage and exchange
+  fees that erode edge — only subscribe if you can tolerate the drawdown
+  and unsuitable regime risk this kind of trend strategy carries.
+
+market_type: contract
+trading_symbols: ["BTCUSDT"]
+tags: ["trend", "ema", "btc", "contract", "demo"]
+
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+
+strategy_config:
+  trading_symbols: ["BTCUSDT"]
+  fast_period: 12
+  slow_period: 26
+  leverage: 3
+  margin_budget: "100"
+
+user_config_schema:
+  trading_symbols:
+    type: array
+    item_type: string
+    default: ["BTCUSDT"]
+    options: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    aliases:
+      btc: BTCUSDT
+      bitcoin: BTCUSDT
+      eth: ETHUSDT
+    min_items: 1
+    max_items: 1
+    label: "Trading symbol"
+  leverage:
+    type: integer
+    default: 3
+    min: 1
+    max: 10
+    aliases:
+      3x: 3
+      5x: 5
+    label: "Leverage"
+  margin_budget:
+    type: string
+    default: "100"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Margin budget USDT"
