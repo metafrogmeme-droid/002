@@ -4,6 +4,7 @@ No getagent / network imports here: every function is a function of closed bars 
 so the same code path produces the signal in backtest and live.
 """
 import math
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -216,6 +217,150 @@ def compute_signals(ind: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     out["sig_mr"] = (valid & reg_m & brk & htf_ok & cfg.enable_mr).fillna(False)
     out["sig_break"] = (valid & reg_b & donch & htf_ok & cfg.enable_break).fillna(False)
     return out
+
+
+class FeatureStream:
+    """O(1)-per-bar incremental twin of compute_indicators + compute_signals (verified equal in research/tests).
+
+    Lets the Nautilus strategy compute features without any pre-built replay columns.
+    """
+
+    def __init__(self, cfg: Config) -> None:
+        self.cfg = cfg
+        self.n = 0
+        self.prev = None
+        self._tr_seed, self._pdm_seed, self._mdm_seed, self._dx_seed = [], [], [], []
+        self._g_seed, self._l_seed = [], []
+        self.atr = self.atr_n = self.pdm_s = self.mdm_s = self.adx = None
+        self.rs_g = self.rs_l = None
+        self.ema_f = self.ema_m = self.ema_s = self.ema_h = None
+        self.closes = deque(maxlen=cfg.bb_period)
+        self.qv = deque(maxlen=24)
+        self.atr_pct_win = deque(maxlen=cfg.atr_pct_window)
+        self.highs = deque(maxlen=cfg.break_lookback)
+        self.prev_prior_high = None
+        self.prev_bb_low = None
+        self.prev_ema_f = None
+        self.prev_close = None
+        self._dx_n = 0
+
+    @staticmethod
+    def _wstep(prev, x, n):
+        return prev + (x - prev) / n
+
+    def push(self, o: float, h: float, l: float, c: float, v: float) -> dict:
+        cfg = self.cfg
+        i = self.n
+        self.n += 1
+        nan = float("nan")
+        if self.prev is None:
+            tr = h - l
+            up = dn = 0.0
+            pdm = mdm = 0.0
+            gain = loss = 0.0
+        else:
+            pc, ph, pl = self.prev
+            tr = max(h - l, abs(h - pc), abs(l - pc))
+            up, dn = h - ph, pl - l
+            pdm = up if (up > dn and up > 0) else 0.0
+            mdm = dn if (dn > up and dn > 0) else 0.0
+            d = c - pc
+            gain, loss = max(d, 0.0), max(-d, 0.0)
+        # Wilder smoothers (seed = mean of first n values)
+        atr = self._wilder_push(i, tr, "atr", cfg.atr_period, self._tr_seed)
+        atr_n = self._wilder_push(i, tr, "atr_n", cfg.adx_period, self._tr_seed2()) if cfg.adx_period != cfg.atr_period else atr
+        pds = self._wilder_push(i, pdm, "pdm_s", cfg.adx_period, self._pdm_seed)
+        mds = self._wilder_push(i, mdm, "mdm_s", cfg.adx_period, self._mdm_seed)
+        rg = self._wilder_push(i, gain, "rs_g", cfg.rsi_period, self._g_seed)
+        rl = self._wilder_push(i, loss, "rs_l", cfg.rsi_period, self._l_seed)
+        pdi = mdi = adx = nan
+        if atr_n is not None and pds is not None and mds is not None:
+            pdi, mdi = 100.0 * pds / atr_n, 100.0 * mds / atr_n
+            dx = 100.0 * abs(pdi - mdi) / (pdi + mdi) if (pdi + mdi) != 0 else nan
+            if not math.isnan(dx):
+                self._dx_n += 1
+                if self.adx is None:
+                    self._dx_seed.append(dx)
+                    if len(self._dx_seed) == cfg.adx_period:
+                        self.adx = sum(self._dx_seed) / cfg.adx_period
+                else:
+                    self.adx = self._wstep(self.adx, dx, cfg.adx_period)
+        adx = self.adx if self.adx is not None else nan
+        # EMAs (adjust=False)
+        def ema(prev, span):
+            a = 2.0 / (span + 1)
+            return c if prev is None else a * c + (1 - a) * prev
+        self.ema_f, self.ema_m, self.ema_s, self.ema_h = (ema(self.ema_f, cfg.ema_fast), ema(self.ema_m, cfg.ema_mid),
+                                                         ema(self.ema_s, cfg.ema_slow), ema(self.ema_h, cfg.htf_span))
+        self.closes.append(c)
+        bb_low = nan
+        if len(self.closes) == cfg.bb_period:
+            arr = np.fromiter(self.closes, float)
+            bb_low = float(arr.mean() - cfg.bb_std * arr.std(ddof=0))
+        rsi = nan
+        if rg is not None and rl is not None:
+            rsi = 100.0 if rl == 0 else 100.0 - 100.0 / (1.0 + rg / rl)
+        self.qv.append(c * v)
+        qv24 = float(sum(self.qv)) if len(self.qv) == 24 else nan
+        atr_pct = atr / c if atr is not None else nan
+        rank = nan
+        self.atr_pct_win.append(atr_pct)
+        if len(self.atr_pct_win) == cfg.atr_pct_window:
+            w = np.fromiter(self.atr_pct_win, float)
+            if not np.isnan(w).any():
+                rank = float((w <= atr_pct).mean())
+        prior_high = max(self.highs) if len(self.highs) == cfg.break_lookback else nan
+        htf = self.ema_h if i >= cfg.htf_span - 1 else nan
+        atr_v = atr if atr is not None else nan
+
+        row = dict(open=o, high=h, low=l, close=c, atr=atr_v, atr_pct=atr_pct, atr_pct_rank=rank, adx=adx, plus_di=pdi, minus_di=mdi,
+                   ema_fast=self.ema_f, ema_mid=self.ema_m, ema_slow=self.ema_s, bb_low=bb_low, rsi=rsi, quote_vol_24h=qv24,
+                   prior_high=prior_high, prior_high_prev=self.prev_prior_high if self.prev_prior_high is not None else nan,
+                   ema_htf=htf)
+        needed = ["atr", "adx", "plus_di", "minus_di", "ema_fast", "ema_mid", "ema_slow", "atr_pct_rank", "bb_low", "rsi"]
+        if cfg.htf_filter:
+            needed.append("ema_htf")
+        valid = all(not math.isnan(row[k]) for k in needed)
+        htf_ok = (c > htf) if (cfg.htf_filter and not math.isnan(htf)) else (not cfg.htf_filter)
+        first = self.prev_close is None
+        pc_ = self.prev_close
+        reg_t = (adx >= cfg.adx_trend_min and pdi > mdi and self.ema_m > self.ema_s and c > self.ema_s and rank >= cfg.atr_pct_rank_min) if valid else False
+        touch = (not first) and c <= self.ema_f and pc_ > self.prev_ema_f and c > self.ema_m
+        reg_m = (adx < cfg.adx_range_max and cfg.atr_pct_rank_min <= rank <= cfg.atr_pct_rank_max_mr) if valid else False
+        brk = (not first) and (not math.isnan(bb_low)) and self.prev_bb_low is not None and not math.isnan(self.prev_bb_low) \
+            and c < bb_low and pc_ >= self.prev_bb_low and rsi < cfg.rsi_mr_max
+        reg_b = (adx >= cfg.adx_trend_min and pdi > mdi and c > self.ema_s and rank >= cfg.break_rank_min) if valid else False
+        pph = row["prior_high_prev"]
+        donch = (not math.isnan(prior_high)) and (not math.isnan(pph)) and c > prior_high and pc_ is not None and pc_ <= pph
+        row["valid"] = valid
+        row["sig_trend"] = bool(valid and reg_t and touch and htf_ok and cfg.enable_trend)
+        row["sig_mr"] = bool(valid and reg_m and brk and htf_ok and cfg.enable_mr)
+        row["sig_break"] = bool(valid and reg_b and donch and htf_ok and cfg.enable_break)
+        # roll state
+        self.highs.append(h)
+        self.prev_prior_high = prior_high
+        self.prev_bb_low = bb_low
+        self.prev_ema_f = self.ema_f
+        self.prev_close = c
+        self.prev = (c, h, l)
+        return row
+
+    def _tr_seed2(self):
+        if not hasattr(self, "_tr_seed_b"):
+            self._tr_seed_b = []
+        return self._tr_seed_b
+
+    def _wilder_push(self, i, x, name, n, seed_list):
+        cur = getattr(self, name)
+        if cur is None:
+            seed_list.append(x)
+            if len(seed_list) == n:
+                cur = sum(seed_list) / n
+                setattr(self, name, cur)
+            return cur
+        cur = self._wstep(cur, x, n)
+        setattr(self, name, cur)
+        return cur
 
 
 def floor_to_step(x: float, step: float) -> float:

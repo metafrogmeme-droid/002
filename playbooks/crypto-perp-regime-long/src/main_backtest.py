@@ -13,11 +13,6 @@ except ImportError:
 HOUR_MS = 3_600_000
 CHUNK_BARS = 990
 VENUE = "BITGET"
-TICKS = {
-    "BTCUSDT": {"tick": 0.1, "step": 0.0001, "min_qty": 0.0001},
-    "ETHUSDT": {"tick": 0.01, "step": 0.01, "min_qty": 0.01},
-    "SOLUSDT": {"tick": 0.001, "step": 0.1, "min_qty": 0.1},
-}
 
 
 def _clean(v):
@@ -107,25 +102,12 @@ def run() -> None:
         if bars is None or bars.empty:
             runtime.emit_signal(action="watch", symbol=sym, confidence=0.0, metrics={"rows": 0}, meta={"reason": f"no bars for {sym}"})
             return
-        ind = rules.compute_indicators(bars, cfg)
-        sig = rules.compute_signals(ind, cfg)
-        frame = bars.copy()
-        frame["atr"] = sig["atr"]
-        frame["quote_vol_24h"] = sig["quote_vol_24h"]
-        for col in ("sig_trend", "sig_mr", "sig_break"):
-            frame[col] = sig[col].astype(float)
-        frame["atr"] = frame["atr"].bfill().fillna(0.0)
-        frame["quote_vol_24h"] = frame["quote_vol_24h"].bfill().fillna(0.0)
-        ohlcv[f"{sym}.{VENUE}"] = frame
-        meta_rows[sym] = dict(rows=len(frame), first=str(frame.index[0]), last=str(frame.index[-1]),
-                              signals=int(frame[["sig_trend", "sig_mr", "sig_break"]].sum().sum()))
+        sig = rules.compute_signals(rules.compute_indicators(bars, cfg), cfg)
+        ohlcv[f"{sym}.{VENUE}"] = bars
+        meta_rows[sym] = dict(rows=len(bars), first=str(bars.index[0]), last=str(bars.index[-1]),
+                              signals_seen=int(sig[["sig_trend", "sig_mr", "sig_break"]].sum().sum()))
 
-    strat = spec.get("strategy", {})
-    strat.setdefault("config", {})
-    strat["config"]["rules_json"] = json.dumps(cfg_map)
-    strat["config"]["tick_json"] = json.dumps(TICKS)
-    strat["config"]["symbols"] = list(cfg.symbols)
-
+    print(json.dumps({"stage": "author_replay", "rows": {k: len(v) for k, v in ohlcv.items()}, "cwd": str(Path.cwd())}))
     result = backtest.run(ohlcv_data=ohlcv, spec=spec)
     chart = backtest.generate_chart(result)
     summary = result.summary or {}
@@ -139,7 +121,7 @@ def run() -> None:
     raw["starting_balance"] = start_balance
     raw.setdefault("reports", {}).pop("equity_curve", None)
 
-    out_dir = Path("/workspace/output")
+    out_dir = Path("output")
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "backtest_report.json").write_text(json.dumps(raw, default=str))
     pts = _equity_rows(result.raw if isinstance(result.raw, dict) else {}, start_balance)

@@ -14,6 +14,11 @@ strategy:
     order_id_tag: "001"
     venue: BITGET
     enforce_halts: false
+    symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+
+execution:
+  start: "2024-10-10T00:00:00Z"
+  end: "2026-10-09T00:00:00Z"
 
 instruments:
   - id: BTCUSDT.BITGET
@@ -58,11 +63,3 @@ instruments:
     maker_fee: "0.0002"
     taker_fee: "0.0006"
     bar_type: SOLUSDT.BITGET-1-HOUR-LAST-EXTERNAL
-
-data_requirements:
-  required_bar_fields:
-    - atr
-    - sig_trend
-    - sig_mr
-    - sig_break
-    - quote_vol_24h

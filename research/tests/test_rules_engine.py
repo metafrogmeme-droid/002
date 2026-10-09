@@ -113,3 +113,18 @@ def test_engine_time_stop_and_unfilled_cancel():
     up = [(10000, 10000, 10000, 10000)] + [(10010, 10050, 10005, 10040)] * 10
     tr2, ev = simulate(_synthetic(up), _cfg1(), 0, len(up), m=0.0)
     assert not tr2 and any(e["ev"] == "entry_cancelled" for e in ev)
+
+
+def test_feature_stream_equals_batch():
+    d = _real(n=5000)
+    for cfg in (replace(CFG, enable_break=True), replace(CFG, enable_break=True, enable_mr=True, htf_filter=True, adx_trend_min=25.0)):
+        batch = rules.compute_signals(rules.compute_indicators(d, cfg), cfg)
+        fs = rules.FeatureStream(cfg)
+        inc = pd.DataFrame([fs.push(r.open, r.high, r.low, r.close, r.volume) for r in d.itertuples()], index=d.index)
+        for col in ["atr", "adx", "ema_fast", "ema_slow", "atr_pct_rank", "bb_low", "rsi", "prior_high", "ema_htf"]:
+            a, b = batch[col].to_numpy(float), inc[col].to_numpy(float)
+            assert ((np.isnan(a) == np.isnan(b)).all()), col
+            m = ~np.isnan(a)
+            assert np.allclose(a[m], b[m], rtol=1e-9, atol=1e-6), col
+        for col in ("valid", "sig_trend", "sig_mr", "sig_break"):
+            assert (batch[col].to_numpy(bool) == inc[col].to_numpy(bool)).all(), col

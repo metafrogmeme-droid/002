@@ -1,0 +1,66 @@
+{
+ "nautilus_like_ex_funding": {
+  "trades": 93,
+  "win_rate": 0.4301,
+  "gross_expectancy_r": 0.1481,
+  "net_expectancy_r": 0.0961,
+  "pf": 1.206,
+  "net_pnl": 132.8955,
+  "max_dd_usdt": 151.0475,
+  "sharpe_daily": 0.5007,
+  "ci": [
+   -0.1390848766740868,
+   0.3427484848741786
+  ],
+  "first_trade": "2024-11-09 20:00:00+00:00",
+  "last_exit": "2026-09-22 02:00:00+00:00"
+ },
+ "conservative_1x_incl_funding": {
+  "trades": 92,
+  "win_rate": 0.413,
+  "gross_expectancy_r": 0.1139,
+  "net_expectancy_r": 0.0492,
+  "pf": 1.1033,
+  "net_pnl": 67.0329,
+  "max_dd_usdt": 159.7565,
+  "sharpe_daily": 0.2704,
+  "ci": [
+   -0.18530761469643808,
+   0.2926917483643071
+  ],
+  "first_trade": "2024-11-09 20:00:00+00:00",
+  "last_exit": "2026-09-22 02:00:00+00:00"
+ },
+ "conservative_2x_incl_funding": {
+  "trades": 92,
+  "win_rate": 0.3696,
+  "gross_expectancy_r": 0.1139,
+  "net_expectancy_r": -0.0155,
+  "pf": 0.9694,
+  "net_pnl": -21.5416,
+  "max_dd_usdt": 213.2771,
+  "sharpe_daily": -0.0874,
+  "ci": [
+   -0.2509931939357825,
+   0.22821678866543577
+  ],
+  "first_trade": "2024-11-09 20:00:00+00:00",
+  "last_exit": "2026-09-22 02:00:00+00:00"
+ },
+ "frictionless_0x": {
+  "trades": 92,
+  "win_rate": 0.4239,
+  "gross_expectancy_r": 0.1139,
+  "net_expectancy_r": 0.1139,
+  "pf": 1.2597,
+  "net_pnl": 155.6077,
+  "max_dd_usdt": 115.4242,
+  "sharpe_daily": 0.6219,
+  "ci": [
+   -0.12179757985074005,
+   0.3579355886454817
+  ],
+  "first_trade": "2024-11-09 20:00:00+00:00",
+  "last_exit": "2026-09-22 02:00:00+00:00"
+ }
+}

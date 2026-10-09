@@ -1,7 +1,8 @@
 """Nautilus replay strategy for the sleeve-A playbook (long-only, bracket orders, single correlation cluster).
 
-Signals, sizing and gates come from rules.py; the replay frames carry the pre-computed causal columns
-(atr, sig_trend, sig_mr, sig_break, quote_vol_24h) built in main_backtest.py.
+Self-contained: features, signals, sizing and gates come from rules.py (FeatureStream is the incremental twin of the
+batch research code), so it runs on plain OHLCV replay frames supplied by the managed runner.
+Configuration is read from the package manifest (single source of truth) with static yaml values as fallback.
 """
 import json
 from decimal import Decimal
@@ -20,7 +21,20 @@ except ImportError:
 
 HOUR_NS = 3_600_000_000_000
 HOUR_MS = 3_600_000
-FEATURE_COLS = ("atr", "sig_trend", "sig_mr", "sig_break", "quote_vol_24h")
+DEFAULT_TICKS = {
+    "BTCUSDT": {"tick": 0.1, "step": 0.0001, "min_qty": 0.0001},
+    "ETHUSDT": {"tick": 0.01, "step": 0.01, "min_qty": 0.01},
+    "SOLUSDT": {"tick": 0.001, "step": 0.1, "min_qty": 0.1},
+}
+
+
+def _manifest_strategy_config() -> dict:
+    try:
+        from getagent import runtime
+
+        return dict(runtime.manifest.get("strategy_config", {}) or {})
+    except Exception:  # noqa: BLE001 - not running inside the managed sandbox
+        return {}
 
 
 class RegimeLongStrategyConfig(StrategyConfig):
@@ -40,10 +54,12 @@ class RegimeLongStrategy(Strategy):
     def __init__(self, config: RegimeLongStrategyConfig) -> None:
         super().__init__(config)
         self.cfg = config
-        self.rcfg = rules.Config.from_mapping(json.loads(config.rules_json))
-        self.rules_ticks = json.loads(config.tick_json)
-        self.frames = {}
-        self._rows = {}
+        mf = _manifest_strategy_config() or json.loads(config.rules_json)
+        mf["margin_cap_usdt"] = mf.get("margin_budget", mf.get("margin_cap_usdt", 500))
+        self.rcfg = rules.Config.from_mapping(mf)
+        self.rules_ticks = mf.get("contract_specs") or json.loads(config.tick_json) or DEFAULT_TICKS
+        self._streams = {}
+        self._bar_i = {}
         self._instruments = {}
         self._pending = None
         self._open = {}
@@ -53,39 +69,23 @@ class RegimeLongStrategy(Strategy):
         self._stopped = False
         self.log_rows = []
 
-    def set_feature_frames(self, feature_frames) -> None:
-        self.frames = feature_frames
-
     def on_start(self) -> None:
         for sym in self.cfg.symbols:
             iid = InstrumentId.from_str(f"{sym}.{self.cfg.venue}")
             self._instruments[sym] = self.cache.instrument(iid)
             if self._instruments[sym] is None:
                 raise RuntimeError(f"instrument not found: {iid}")
-            frame = self._frame_for(iid)
-            if frame is None:
-                raise RuntimeError(f"feature frame missing for {iid}")
-            self._rows[sym] = {
-                "ts": {int(t.value): i for i, t in enumerate(frame.index)},
-                "cols": {c: frame[c].to_numpy() for c in FEATURE_COLS},
-                "close": frame["close"].to_numpy(),
-            }
+            self._streams[sym] = rules.FeatureStream(self.rcfg)
+            self._bar_i[sym] = -1
             self.subscribe_bars(BarType.from_str(f"{iid}-1-HOUR-LAST-EXTERNAL"))
-
-    def _frame_for(self, iid: InstrumentId):
-        for key in (str(iid), iid.value, iid.symbol.value):
-            if key in self.frames:
-                return self.frames[key]
-        return None
 
     def on_bar(self, bar: Bar) -> None:
         sym = bar.bar_type.instrument_id.symbol.value
-        if sym not in self._rows:
+        if sym not in self._streams:
             return
-        rows = self._rows[sym]
-        i = rows["ts"].get(int(bar.ts_event))
-        if i is None:
-            return
+        feat = self._streams[sym].push(float(bar.open), float(bar.high), float(bar.low), float(bar.close), float(bar.volume))
+        self._bar_i[sym] += 1
+        i = self._bar_i[sym]
         ts_ms = int(bar.ts_event) // 1_000_000
         inst = self._instruments[sym]
 
@@ -107,17 +107,16 @@ class RegimeLongStrategy(Strategy):
             return
         if self._day_pnl.get((ts_ms + HOUR_MS) // (24 * HOUR_MS), 0.0) <= -self.rcfg.daily_pause_usdt:
             return
-        c = rows["cols"]
-        module = "trend" if c["sig_trend"][i] > 0.5 else "break" if c["sig_break"][i] > 0.5 else "mr" if c["sig_mr"][i] > 0.5 else None
+        module = "trend" if feat["sig_trend"] else "break" if feat["sig_break"] else "mr" if feat["sig_mr"] else None
         if module is None:
             return
-        if not (c["quote_vol_24h"][i] >= self.rcfg.min_volume_24h_usdt):
+        if not (feat["quote_vol_24h"] >= self.rcfg.min_volume_24h_usdt):
             return
         tick = self.rules_ticks[sym]
         plan = rules.build_plan(
             module=module,
-            close=float(rows["close"][i]),
-            atr=float(c["atr"][i]),
+            close=feat["close"],
+            atr=feat["atr"],
             decision_ts_ms=ts_ms + HOUR_MS,
             cfg=self.rcfg,
             tick=tick["tick"],
@@ -149,8 +148,7 @@ class RegimeLongStrategy(Strategy):
         pend = self._pending
         if pend is not None and event.client_order_id == pend["entry_id"]:
             sym = pend["sym"]
-            rows = self._rows[sym]
-            fill_i = rows["ts"].get(int(self.clock.timestamp_ns()) // HOUR_NS * HOUR_NS, pend["i"] + 1)
+            fill_i = self._bar_i[sym]
             self._open[sym] = {"fill_i": fill_i, "hold": pend["hold"], "module": pend["module"]}
             self._pending = None
 

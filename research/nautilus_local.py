@@ -56,7 +56,7 @@ scfg = strat_mod.RegimeLongStrategyConfig(order_id_tag="001", symbols=tuple(cfg.
                                                                 {"BTCUSDT": dict(tick=0.1, step=0.0001, min_qty=0.0001), "ETHUSDT": dict(tick=0.01, step=0.01, min_qty=0.01), "SOLUSDT": dict(tick=0.001, step=0.1, min_qty=0.1)}.items()}),
                                           enforce_halts=False)
 s = strat_mod.RegimeLongStrategy(scfg)
-s.set_feature_frames(frames)
+
 engine.add_strategy(s)
 t = time.time(); engine.run(); print("run secs", round(time.time() - t, 1))
 pos = engine.trader.generate_positions_report()

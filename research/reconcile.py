@@ -6,7 +6,7 @@ from engine import *
 
 V1 = replace(Config(), enable_trend=False, enable_mr=False, enable_break=True, adx_trend_min=30.0, margin_cap_usdt=500.0)
 raw = load(V1.symbols); prep = prepare(raw, V1); idx = prep["BTCUSDT"].index
-i0 = int(idx.searchsorted(pd.Timestamp("2024-04-10", tz="UTC"))); i1 = len(idx)
+i0 = 0; i1 = len(idx)
 ts_ms = (idx.astype("int64") // 1_000_000).to_numpy()
 out = {}
 for name, opts in {
@@ -15,7 +15,7 @@ for name, opts in {
 }.items():
     tr, _ = simulate(prep, V1, i0, i1, m=1.0, opts=opts); d = metrics(tr, int(ts_ms[i0]), int(ts_ms[-1]))
     out[name] = dict(trades=d["trades"], net_pnl=round(d["net_pnl"], 2), pf=round(d["pf"], 3), net_expectancy_r=round(d["net_expectancy_r"], 3))
-p = subprocess.run([sys.executable, "nautilus_local.py", "2024-04-10", "2026-10-10"], capture_output=True, text=True)
+p = subprocess.run([sys.executable, "nautilus_local.py", "2024-03-04", "2026-10-10"], capture_output=True, text=True)
 for line in p.stdout.splitlines():
     if line.startswith("net pnl (nautilus") or line.startswith("positions"):
         out.setdefault("nautilus_replay_raw", []).append(line)
