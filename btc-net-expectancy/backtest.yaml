@@ -23,8 +23,8 @@ strategy:
     atr_percentile_lookback: 168
     atr_percentile_min: "30"
     atr_percentile_max: "75"
-    breakout_atr_buffer: "0"
-    close_location_min: "0"
+    breakout_atr_buffer: "0.25"
+    close_location_min: "0.75"
     take_profit_r: "2"
     time_stop_hours: 8
     order_ttl_hours: 4
@@ -47,5 +47,5 @@ instrument:
   bar_type: BTCUSDT.BITGET-1-HOUR-LAST-EXTERNAL
 
 execution:
-  start: "2024-10-09T00:00:00Z"
+  start: "2022-10-09T00:00:00Z"
   end: "2026-10-09T00:00:00Z"

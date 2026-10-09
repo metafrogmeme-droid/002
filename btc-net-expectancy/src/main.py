@@ -112,9 +112,9 @@ def _records(value: Any) -> list[dict[str, Any]]:
     return [dict(row) for row in data.to_records(value)]
 
 
-def _fetch_two_year_frame() -> pd.DataFrame:
+def _fetch_four_year_frame() -> pd.DataFrame:
     end = datetime(2026, 10, 9, tzinfo=timezone.utc)
-    start = datetime(2024, 10, 9, tzinfo=timezone.utc)
+    start = datetime(2022, 10, 9, tzinfo=timezone.utc)
     cursor = start
     chunks: list[pd.DataFrame] = []
     while cursor < end:
@@ -139,31 +139,31 @@ def _fetch_two_year_frame() -> pd.DataFrame:
     return frame[(frame.index >= pd.Timestamp(start)) & (frame.index < pd.Timestamp(end))]
 
 
-def _fetch_two_year_funding() -> dict[int, float]:
+def _fetch_historical_funding() -> dict[int, float]:
     end = datetime(2026, 10, 9, tzinfo=timezone.utc)
-    start = datetime(2024, 10, 9, tzinfo=timezone.utc)
-    cursor = start
+    start = datetime(2022, 10, 9, tzinfo=timezone.utc)
     settlements: dict[int, float] = {}
-    while cursor < end:
-        chunk_end = min(cursor + timedelta(days=40), end)
-        response = data.crypto.futures.funding_rate(
-            symbol=SYMBOL,
-            exchange="bitget",
-            interval="1h",
-            limit=1000,
-            start_time=int(cursor.timestamp() * 1000),
-            end_time=int(chunk_end.timestamp() * 1000),
-        )
-        for row in _records(response):
-            settlement_ms = _timestamp_ms(row.get("next_funding_time"))
-            rate = row.get("funding_rate")
-            if (
-                settlement_ms > 0
-                and int(start.timestamp() * 1000) < settlement_ms <= int(end.timestamp() * 1000)
-                and rate not in (None, "")
-            ):
-                settlements[settlement_ms] = float(rate)
-        cursor = chunk_end
+    response = data.crypto.futures.funding_rate(
+        symbol=SYMBOL,
+        exchange="bitget",
+        interval="1h",
+        limit=1000,
+        start_time=int((end - timedelta(days=40)).timestamp() * 1000),
+        end_time=int(end.timestamp() * 1000),
+    )
+    for row in _records(response):
+        settlement_ms = _timestamp_ms(row.get("next_funding_time"))
+        rate = row.get("funding_rate")
+        if settlement_ms > 0 and rate not in (None, ""):
+            settlements[settlement_ms] = float(rate)
+    if not settlements:
+        return {}
+    earliest = min(settlements)
+    latest = max(settlements)
+    if earliest > int((start + timedelta(hours=8)).timestamp() * 1000):
+        return {}
+    if latest < int((end - timedelta(hours=8)).timestamp() * 1000):
+        return {}
     return settlements
 
 
@@ -188,9 +188,9 @@ def _write_report(
         "rows": len(frame),
         "first_bar": frame.index.min().isoformat(),
         "last_bar": frame.index.max().isoformat(),
-        "planned_walk_forward_split": {
-            "development": "2024-10-09/2025-10-08",
-            "validation": "2025-10-09/2026-10-08",
+        "walk_forward_split": {
+            "development": "2022-10-09/2024-10-08",
+            "validation": "2024-10-09/2026-10-08",
         },
         "cost_basis": (
             "public maker/taker fees plus two ticks per round trip and modeled historical funding; account-tier rate pending"
@@ -227,7 +227,7 @@ def _write_report(
 
 
 def _run_historical() -> None:
-    frame = _fetch_two_year_frame()
+    frame = _fetch_four_year_frame()
     if frame.empty:
         runtime.emit_signal(
             action="watch",
@@ -237,9 +237,9 @@ def _run_historical() -> None:
             meta={"reason_code": "NO_REPLAY_DATA"},
         )
         return
-    if frame.index.min() > pd.Timestamp("2024-10-09T01:00:00Z"):
-        raise RuntimeError(f"two-year replay coverage incomplete: {frame.index.min()}")
-    funding_by_settlement_ms = _fetch_two_year_funding()
+    if frame.index.min() > pd.Timestamp("2022-10-09T01:00:00Z"):
+        raise RuntimeError(f"four-year replay coverage incomplete: {frame.index.min()}")
+    funding_by_settlement_ms = _fetch_historical_funding()
     result = backtest.run(
         ohlcv_data={"BTCUSDT.BITGET": frame},
         spec=runtime.backtest_spec,
@@ -249,12 +249,12 @@ def _run_historical() -> None:
 
     development_spec = json.loads(json.dumps(dict(runtime.backtest_spec)))
     development_spec["execution"] = {
-        "start": "2024-10-09T00:00:00Z",
-        "end": "2025-10-09T00:00:00Z",
+        "start": "2022-10-09T00:00:00Z",
+        "end": "2024-10-09T00:00:00Z",
     }
     validation_spec = json.loads(json.dumps(dict(runtime.backtest_spec)))
     validation_spec["execution"] = {
-        "start": "2025-10-09T00:00:00Z",
+        "start": "2024-10-09T00:00:00Z",
         "end": "2026-10-09T00:00:00Z",
     }
     development_result = backtest.run(
@@ -325,8 +325,8 @@ def _run_historical() -> None:
             "period_start": frame.index.min().isoformat(),
             "period_end": frame.index.max().isoformat(),
             "walk_forward_split": {
-                "development": "2024-10-09/2025-10-08",
-                "validation": "2025-10-09/2026-10-08",
+                "development": "2022-10-09/2024-10-08",
+                "validation": "2024-10-09/2026-10-08",
             },
             "walk_forward": walk_forward,
             "selection_note": "validation is a fixed time split, but prior aggregate candidate inspection creates selection leakage",

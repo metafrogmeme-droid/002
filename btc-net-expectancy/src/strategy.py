@@ -26,8 +26,8 @@ class BtcNetExpectancyConfig(StrategyConfig):
     atr_percentile_lookback: int = 168
     atr_percentile_min: str = "30"
     atr_percentile_max: str = "75"
-    breakout_atr_buffer: str = "0"
-    close_location_min: str = "0"
+    breakout_atr_buffer: str = "0.25"
+    close_location_min: str = "0.75"
     take_profit_r: str = "2"
     time_stop_hours: int = 8
     order_ttl_hours: int = 4
