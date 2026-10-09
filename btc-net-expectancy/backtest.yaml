@@ -1,0 +1,47 @@
+venue:
+  name: BITGET
+  account_type: MARGIN
+  oms_type: NETTING
+  starting_balances:
+    - amount: 10000
+      currency: USDT
+
+strategy:
+  module: strategy
+  class: BtcNetExpectancyStrategy
+  config_class: BtcNetExpectancyConfig
+  config:
+    order_id_tag: "001"
+    risk_usdt: "15"
+    atr_period: 14
+    atr_stop_multiple: "1.5"
+    adx_period: 14
+    adx_min: "25"
+    breakout_period: 20
+    atr_percentile_lookback: 168
+    atr_percentile_min: "20"
+    atr_percentile_max: "90"
+    take_profit_r: "2"
+    time_stop_hours: 8
+    order_ttl_hours: 4
+    min_24h_volume_usdt: "100000000"
+
+instrument:
+  id: BTCUSDT.BITGET
+  kind: perpetual
+  raw_symbol: BTCUSDT
+  base_currency: BTC
+  quote_currency: USDT
+  settlement_currency: USDT
+  price_precision: 1
+  size_precision: 4
+  price_increment: "0.1"
+  size_increment: "0.0001"
+  lot_size: "0.0001"
+  maker_fee: "0.0002"
+  taker_fee: "0.0006"
+  bar_type: BTCUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+
+execution:
+  start: "2024-10-09T00:00:00Z"
+  end: "2026-10-09T00:00:00Z"

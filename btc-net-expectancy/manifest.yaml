@@ -1,0 +1,92 @@
+name: btc-net-expectancy
+display_name: "BTC Net Expectancy"
+version: "1.0.0"
+display_name_i18n:
+  en: "BTC Net Expectancy"
+  zh: "BTC 净期望策略"
+  zh-tw: "BTC 淨期望策略"
+  es: "Expectativa neta de BTC"
+  ja: "BTCネット期待値"
+  vi: "Kỳ vọng ròng BTC"
+description: "Long-only BTCUSDT perpetual trend entries with volatility, liquidity, funding, and fixed-risk controls."
+description_i18n:
+  en: "Long-only BTCUSDT perpetual trend entries with volatility, liquidity, funding, and fixed-risk controls."
+  zh: "仅做多 BTCUSDT 永续合约，采用趋势、波动率、流动性、资金费率和固定风险控制。"
+  zh-tw: "僅做多 BTCUSDT 永續合約，採用趨勢、波動率、流動性、資金費率和固定風險控制。"
+  es: "Entradas tendenciales solo largas en el perpetuo BTCUSDT con controles de volatilidad, liquidez, financiación y riesgo fijo."
+  ja: "BTCUSDT無期限契約をロング限定で運用し、トレンド、変動性、流動性、資金調達、固定リスクを管理します。"
+  vi: "Chiến lược chỉ mua hợp đồng vĩnh viễn BTCUSDT với kiểm soát xu hướng, biến động, thanh khoản, funding và rủi ro cố định."
+long_description: |
+  This Playbook aims to capture sustained upward trends in the BTC perpetual market while measuring success from net trading outcomes rather than displayed return alone. It is deliberately long-only and treats capital preservation as part of the thesis. The strategy avoids participation when market data, liquidity, account ownership, or funding conditions cannot be verified, so an uncertain input produces no trade instead of an optimistic assumption.
+
+  It enters long only when directional strength, an upward price breakout, and an acceptable volatility regime agree. A live liquidity check must also confirm a narrow spread and sufficient turnover. The funding check rejects entries near settlement or when the expected holding cost consumes too much of the planned risk. Entry orders are passive limits, and stale unfilled orders are cancelled rather than chased.
+
+  Every accepted entry carries a volatility-scaled stop and a fixed reward target. Position size is determined from the loss allowed at the stop, then constrained by exchange quantity rules and the configured leverage cap. The Playbook closes on the protective stop, the take-profit target, or a trend time limit. It never opens a short and never modifies a position that it cannot attribute to itself.
+
+  Subscriber-tunable parameters control leverage, margin budget, per-trade risk, the liquidity floor, and the maximum spread. Raising leverage increases capital efficiency but also liquidation sensitivity; it does not increase the fixed stop loss budget. Raising the liquidity floor or tightening the spread cap makes entries rarer and potentially cleaner. Increasing per-trade risk scales losses and gains in cash terms, while margin budget sets the strategy return denominator and capacity ceiling.
+
+  The main risk is repeated false breakouts during choppy or abruptly reversing markets. Gaps, exchange outages, delayed data, fee-tier differences, unexpected funding, and limit-order non-fills can make live results worse than historical evidence. The strategy may underperform when trends are weak or volatility changes faster than hourly indicators react. Backtests cannot guarantee positive live expectancy, and the Playbook must be stopped when its declared loss controls or forward failure criteria are reached.
+market_type: contract
+trading_symbols: ["BTCUSDT"]
+output_kind: trade_strategy
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+tags: ["btc", "contract", "long-only", "trend", "risk-controlled"]
+schedule:
+  cron: "30 * * * *"
+  tz: "UTC"
+
+strategy_config:
+  trading_symbols: ["BTCUSDT"]
+  leverage: 5
+  margin_budget: "300"
+  risk_usdt: "15"
+  atr_period: 14
+  atr_stop_multiple: "1.5"
+  adx_period: 14
+  adx_min: "25"
+  breakout_period: 20
+  atr_percentile_lookback: 168
+  atr_percentile_min: "20"
+  atr_percentile_max: "90"
+  take_profit_r: "2"
+  time_stop_hours: 8
+  max_spread_bps: "5"
+  min_24h_volume_usdt: "100000000"
+  funding_r_limit: "0.1"
+  funding_blackout_minutes: 15
+  order_ttl_hours: 4
+  daily_pause_loss_usdt: "30"
+  playbook_stop_loss_usdt: "40"
+  consecutive_loss_halt: 5
+
+user_config_schema:
+  leverage:
+    type: integer
+    default: 5
+    min: 1
+    max: 5
+    label: "Leverage cap"
+  margin_budget:
+    type: string
+    default: "300"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Margin budget USDT"
+  risk_usdt:
+    type: string
+    default: "15"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Loss at stop USDT"
+  min_24h_volume_usdt:
+    type: string
+    default: "100000000"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Minimum 24h quote volume USDT"
+  max_spread_bps:
+    type: string
+    default: "5"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Maximum spread bps"
