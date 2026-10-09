@@ -1,0 +1,159 @@
+name: crypto-majors-trend-pullback
+display_name: "Crypto Majors Trend Pullback (Long-Only)"
+display_name_i18n:
+  en: "Crypto Majors Trend Pullback (Long-Only)"
+  zh: "主流币趋势回调做多"
+  zh-tw: "主流幣趨勢回調做多"
+  es: "Retroceso en tendencia de criptomonedas principales (solo largos)"
+  ja: "主要暗号資産トレンド押し目買い（ロングのみ）"
+  vi: "Mua theo xu hướng điều chỉnh các đồng chủ chốt (chỉ Long)"
+version: "1.0.0"
+description: "Long-only hourly trend-pullback entries on BTC, ETH and SOL perpetuals with fixed USDT risk, attached stop and target, and strict circuit breakers"
+description_i18n:
+  en: "Long-only hourly trend-pullback entries on BTC, ETH and SOL perpetuals with fixed USDT risk, attached stop and target, and strict circuit breakers"
+  zh: "在 BTC、ETH、SOL 永续合约上按小时级趋势回调做多，固定 USDT 风险，附带止损止盈与严格熔断"
+  zh-tw: "在 BTC、ETH、SOL 永續合約上按小時級趨勢回調做多，固定 USDT 風險，附帶止損止盈與嚴格熔斷"
+  es: "Entradas largas por retroceso en tendencia horaria en perpetuos de BTC, ETH y SOL con riesgo fijo en USDT, stop y objetivo adjuntos y cortacircuitos estrictos"
+  ja: "BTC・ETH・SOL 無期限契約で時間足のトレンド押し目をロングのみで狙い、固定 USDT リスク、付帯ストップとターゲット、厳格なサーキットブレーカーを備える"
+  vi: "Vào lệnh Long theo xu hướng điều chỉnh khung giờ trên hợp đồng vĩnh cửu BTC, ETH, SOL với rủi ro USDT cố định, cắt lỗ và chốt lời đính kèm, ngắt mạch nghiêm ngặt"
+long_description: |
+  This Playbook is a long-only trend-following strategy on the three most
+  liquid crypto perpetual contracts on Bitget. Its thesis is that when a major
+  coin is already in an established uptrend with healthy but not extreme
+  volatility, short pullbacks toward the recent average price tend to be
+  bought, and the market more often resumes upward than it breaks down. The
+  strategy harvests that asymmetry with small, pre-defined risk per trade
+  rather than predicting tops or bottoms, and it never shorts.
+
+  Entry decisions start with a regime read on hourly bars: trend strength must
+  be elevated, directional pressure must favour buyers, price must sit above
+  its long-horizon average, and realised volatility must sit inside a healthy
+  band rather than being dead or panicked. Only then does the strategy rest a
+  limit buy at the short-horizon average price, waiting for a pullback to come
+  to it instead of chasing. Among eligible coins it picks the
+  strongest trend, because the three majors behave as one correlation cluster
+  and only one position is allowed in that cluster at a time. Entries are
+  skipped around funding settlement, when expected funding would erode the
+  edge, or when liquidity or data freshness checks fail.
+
+  Every entry carries an exchange-side stop loss and take profit from the
+  first fill. The stop distance scales with current volatility, and the
+  target is a fixed multiple of that stop. A time stop closes any position that
+  has neither hit its target nor its stop within the planned holding window,
+  and unfilled entries are cancelled after a short waiting period. Daily loss
+  pauses, a daily hard stop, and a consecutive-loss halt cut activity when the
+  market stops cooperating.
+
+  Subscribers can tune the traded symbols, leverage, margin budget, the fixed
+  risk per trade, and the minimum daily volume gate. Leverage changes only the
+  margin consumed, not the position risk; raising the risk per trade scales
+  every outcome proportionally; a larger margin budget allows the risk-based
+  position size to be reached without capping. Lowering the volume gate admits thinner markets.
+
+  Risks: the strategy underperforms in choppy, range-bound markets where trend
+  readings flip and pullbacks keep running into stops, and it can suffer
+  drawdowns during liquidation cascades that gap through stop levels. Funding,
+  slippage and fees are deducted in the backtest, but live execution can still
+  lose money in ways history did not show. Past backtest performance is not a
+  guarantee of live profitability.
+market_type: contract
+trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+tags: ["trend", "pullback", "long-only", "btc", "eth", "sol", "contract", "risk-managed"]
+schedule:
+  cron: "2 * * * *"
+  tz: "UTC"
+
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+
+strategy_config:
+  trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+  leverage: 5
+  margin_budget: "500"
+  risk_per_trade_usdt: 15
+  min_24h_volume_usdt: 100000000
+  # --- regime / trigger (1h bars) ---
+  ema_fast_period: 20
+  ema_slow_period: 200
+  atr_period: 14
+  adx_period: 14
+  adx_min: 25
+  atr_rank_window: 720
+  atr_rank_min: 0.2
+  atr_rank_max: 0.9
+  max_extension_atr: 1.5
+  # --- exits ---
+  stop_atr_mult: 1.5
+  take_profit_r: 2.0
+  time_stop_hours: 8
+  entry_max_age_hours: 4
+  # --- funding ---
+  funding_interval_hours: 8
+  funding_window_minutes: 15
+  max_funding_r: 0.1
+  # --- circuit breakers ---
+  daily_pause_usdt: 30
+  daily_stop_usdt: 40
+  max_consecutive_losses: 5
+  halt_cooldown_hours: 72
+  # --- liquidity / data ---
+  max_spread_bps: 5
+  max_quote_age_seconds: 60
+  slippage_ticks: 1
+  data_exchange: bitget
+  # --- replay controls ---
+  backtest_days: 730
+  warmup_days: 45
+  backtest_fetch_budget_seconds: 95
+  # Authoring-time snapshot of Bitget USDT-FUTURES contract rules (2026-10-09);
+  # live code prefers trade.helpers.contract_rules and falls back to this.
+  instrument_rules_snapshot:
+    BTCUSDT: {tick: 0.1, size_step: 0.0001, min_qty: 0.0001, min_notional: 5, price_precision: 1, size_precision: 4}
+    ETHUSDT: {tick: 0.01, size_step: 0.01, min_qty: 0.01, min_notional: 5, price_precision: 2, size_precision: 2}
+    SOLUSDT: {tick: 0.001, size_step: 0.1, min_qty: 0.1, min_notional: 5, price_precision: 3, size_precision: 1}
+
+user_config_schema:
+  trading_symbols:
+    type: array
+    item_type: string
+    default: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    options: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    aliases:
+      btc: BTCUSDT
+      bitcoin: BTCUSDT
+      eth: ETHUSDT
+      ethereum: ETHUSDT
+      sol: SOLUSDT
+      solana: SOLUSDT
+    min_items: 1
+    max_items: 3
+    label: "Trading symbols (crypto majors cluster)"
+  leverage:
+    type: integer
+    default: 5
+    min: 1
+    max: 5
+    aliases:
+      3x: 3
+      5x: 5
+    label: "Leverage (isolated, capped at 5x)"
+  margin_budget:
+    type: string
+    default: "500"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Margin budget USDT"
+  risk_per_trade_usdt:
+    type: number
+    default: 15
+    min: 1
+    max: 100
+    label: "Risk per trade at stop (USDT)"
+  min_24h_volume_usdt:
+    type: number
+    default: 100000000
+    min: 0
+    max: 100000000000
+    label: "Minimum 24h quote volume gate (USDT)"
