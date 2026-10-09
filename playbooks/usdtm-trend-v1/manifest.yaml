@@ -1,0 +1,99 @@
+name: usdtm-trend-v1
+display_name: "USDT-M Trend v1 — EMA-ADX Long Only"
+version: "1.0.0"
+display_name_i18n:
+  en: "USDT-M Trend v1 — EMA-ADX Long Only"
+  zh: "USDT-M 趋势 v1 — EMA-ADX 只做多"
+  zh-tw: "USDT-M 趨勢 v1 — EMA-ADX 只做多"
+  es: "USDT-M Tendencia v1 — EMA-ADX solo largos"
+  ja: "USDT-M トレンド v1 — EMA-ADX ロング限定"
+  vi: "USDT-M Trend v1 — EMA-ADX chỉ Long"
+description: "Long-only hourly trend Playbook on BTC/ETH/SOL USDT-M perps with regime gate, fixed-loss sizing, and halt rules."
+description_i18n:
+  en: "Long-only hourly trend Playbook on BTC/ETH/SOL USDT-M perps with regime gate, fixed-loss sizing, and halt rules."
+  zh: "针对 BTC/ETH/SOL USDT-M 永续的纯多小时级趋势策略，带状态过滤、固定亏损仓位和熔断规则。"
+  zh-tw: "針對 BTC/ETH/SOL USDT-M 永續的純多小時級趨勢策略，帶狀態過濾、固定虧損倉位和熔斷規則。"
+  es: "Estrategia de tendencia horaria solo largos en perps USDT-M de BTC/ETH/SOL con filtro de régimen y reglas de parada."
+  ja: "BTC/ETH/SOL の USDT-M 無期限先物を対象とするロング限定の時間足トレンド戦略。レジーム判定と固定損失サイジング付き。"
+  vi: "Chiến lược trend khung giờ chỉ Long trên perp USDT-M BTC/ETH/SOL với bộ lọc regime và quy tắc dừng."
+long_description: |
+  This Playbook is a long-only trend-following strategy for perpetual futures on three major crypto assets quoted in USDT. The thesis it captures is that sustained directional moves, once confirmed by trend-strength behavior, tend to travel further than sideways chop rewards. It aims to sit out weak regimes entirely and only participate when momentum aligns with a measurable trend. It is designed for subscribers who want a transparent rule set rather than a black-box signal.
+
+  The strategy enters a long position only when several independent reads agree. A regime read must confirm that trend strength is present and volatility is not dormant. A moving-average alignment must flip fresh to the upside, so entries chase newly formed momentum. Funding must cooperate: entries pause around scheduled funding times and skip longs when the prevailing charge leans against the position. When any read disagrees or data is missing, the Playbook opens nothing and records the reason.
+
+  Every position carries protection from the moment it opens. A stop is attached at order time on the exchange side and sized from prevailing volatility, so one adverse move closes the trade at a known loss. A fixed take-profit target locks in gains at a constant multiple of that risk, then the Playbook closes the remainder rather than trailing. A time stop exits drifters that move sideways, freeing margin for fresher setups.
+
+  Subscribers can adjust a small set of parameters. Leverage controls how much notional each margin unit commands; raising it magnifies gains and losses without changing selectivity, and a hard cap keeps sizing inside the venue limit. Margin budget is the per-strategy capital denominator used for sizing and return computation. Risk per trade fixes the loss taken when a stop triggers, so lowering it shrinks every position.
+
+  Trend strategies carry clear risks. Range-bound markets generate repeated false entries that bleed through stops, and sharp reversals can deepen drawdowns fast. Funding drag, fees, and slippage erode edge on every round trip. The Playbook underperforms badly in choppy or news-driven conditions Past simulation results never guarantee live profitability, so size this Playbook to keep a sustained losing run affordable rather than ruinous.
+market_type: contract
+trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+output_kind: trade_strategy
+tags: ["trend", "ema-adx", "long-only", "usdt-m", "contract", "regime-filter"]
+schedule:
+  cron: "15 * * * *"
+  tz: "UTC"
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+strategy_config:
+  trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+  leverage: 5
+  margin_budget: "300"
+  risk_per_trade_usdt: 15
+  ema_fast: 20
+  ema_slow: 50
+  adx_period: 14
+  adx_threshold: 20
+  atr_period: 14
+  atr_stop_mult: 1.5
+  atr_min_rank: 0.10
+  volume_lookback: 20
+  volume_mult: 1.5
+  tp_r_mult: 2.0
+  max_positions: 3
+  max_per_symbol: 1
+  daily_pause_usdt: -30
+  daily_stop_usdt: -40
+  consec_loss_halt: 5
+  entry_ttl_hours: 4
+  time_stop_hours: 8
+  funding_guard_pct: 0.03
+  funding_blackout_min: 15
+user_config_schema:
+  trading_symbols:
+    type: array
+    item_type: string
+    default: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    options: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    aliases:
+      btc: BTCUSDT
+      bitcoin: BTCUSDT
+      eth: ETHUSDT
+      ethereum: ETHUSDT
+      sol: SOLUSDT
+      solana: SOLUSDT
+    min_items: 1
+    max_items: 3
+    label: "Trading symbols"
+  leverage:
+    type: integer
+    default: 5
+    min: 1
+    max: 5
+    aliases:
+      5x: 5
+    label: "Leverage (hard cap 5)"
+  margin_budget:
+    type: string
+    default: "300"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Margin budget USDT"
+  risk_per_trade_usdt:
+    type: number
+    default: 15
+    min: 1
+    max: 100
+    label: "Fixed loss per trade USDT"
