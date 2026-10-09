@@ -47,14 +47,14 @@ strategy_config:
   atr_period: 14
   atr_stop_multiple: "1.5"
   adx_period: 14
-  adx_min: "35"
+  adx_min: "30"
   breakout_period: 48
   long_trend_period: 200
   trend_slope_hours: 24
   atr_percentile_lookback: 168
-  atr_percentile_min: "40"
-  atr_percentile_max: "85"
-  limit_offset_atr: "0.25"
+  atr_percentile_min: "30"
+  atr_percentile_max: "75"
+  min_atr_pct: "0.7"
   take_profit_r: "2"
   time_stop_hours: 8
   max_spread_bps: "5"

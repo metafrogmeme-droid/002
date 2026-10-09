@@ -10,10 +10,6 @@ from nautilus_trader.model.objects import Price, Quantity
 from nautilus_trader.trading.strategy import Strategy
 
 
-def math_floor_to_step(value: float, step: float) -> float:
-    return float((Decimal(str(value)) / Decimal(str(step))).to_integral_value(rounding=ROUND_DOWN) * Decimal(str(step)))
-
-
 class BtcNetExpectancyConfig(StrategyConfig):
     instrument_id: Optional[InstrumentId] = None
     bar_type: Optional[BarType] = None
@@ -23,14 +19,14 @@ class BtcNetExpectancyConfig(StrategyConfig):
     atr_period: int = 14
     atr_stop_multiple: str = "1.5"
     adx_period: int = 14
-    adx_min: str = "35"
+    adx_min: str = "30"
     breakout_period: int = 48
     long_trend_period: int = 200
     trend_slope_hours: int = 24
     atr_percentile_lookback: int = 168
-    atr_percentile_min: str = "40"
-    atr_percentile_max: str = "85"
-    limit_offset_atr: str = "0.25"
+    atr_percentile_min: str = "30"
+    atr_percentile_max: str = "75"
+    min_atr_pct: str = "0.7"
     take_profit_r: str = "2"
     time_stop_hours: int = 8
     order_ttl_hours: int = 4
@@ -153,12 +149,13 @@ class BtcNetExpectancyStrategy(Strategy):
             <= float(self.cfg.atr_percentile_max)
         ):
             return
+        if atr / close * 100.0 < float(self.cfg.min_atr_pct):
+            return
         if quote_volume_24h < float(self.cfg.min_24h_volume_usdt):
             return
 
         tick = float(instrument.price_increment)
-        entry = close - float(self.cfg.limit_offset_atr) * atr
-        entry = math_floor_to_step(entry, tick)
+        entry = close - tick
         stop_distance = float(self.cfg.atr_stop_multiple) * atr
         stop = entry - stop_distance - tick
         target = entry + float(self.cfg.take_profit_r) * stop_distance - tick

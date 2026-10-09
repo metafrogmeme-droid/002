@@ -549,6 +549,7 @@ def _run_live() -> None:
         and close > trend_now
         and trend_now > trend_then
         and adx >= Decimal(str(cfg["adx_min"]))
+        and atr / close * Decimal("100") >= Decimal(str(cfg["min_atr_pct"]))
         and Decimal(str(cfg["atr_percentile_min"])) <= atr_percentile <= Decimal(str(cfg["atr_percentile_max"]))
     )
     if not signal_ok:
@@ -562,9 +563,7 @@ def _run_live() -> None:
     leverage = min(int(cfg["leverage"]), 5)
     rules = trade.helpers.contract_rules(SYMBOL)
     tick = Decimal(str(rules.price_step))
-    entry = (
-        (bid - Decimal(str(cfg["limit_offset_atr"])) * atr) / tick
-    ).to_integral_value(rounding=ROUND_DOWN) * tick
+    entry = ((bid - tick) / tick).to_integral_value(rounding=ROUND_DOWN) * tick
     stop_distance = Decimal(str(cfg["atr_stop_multiple"])) * atr
     stop = ((entry - stop_distance) / tick).to_integral_value(rounding=ROUND_DOWN) * tick
     target = ((entry + Decimal(str(cfg["take_profit_r"])) * stop_distance) / tick).to_integral_value(rounding=ROUND_DOWN) * tick
