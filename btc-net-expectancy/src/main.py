@@ -24,6 +24,55 @@ def _finite(value: Any) -> Any:
     return value
 
 
+def _money(value: Any) -> float:
+    text = str(value or "0").split()[0]
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _trade_metrics(result: Any, risk_usdt: float) -> dict[str, Any]:
+    raw = result.raw if isinstance(result.raw, dict) else {}
+    reports = raw.get("reports", {}) if isinstance(raw, dict) else {}
+    positions = reports.get("positions", []) if isinstance(reports, dict) else []
+    scenarios: dict[str, list[float]] = {"0x": [], "1x": [], "2x": []}
+    for position in positions if isinstance(positions, list) else []:
+        if not isinstance(position, dict) or not position.get("ts_closed"):
+            continue
+        net = _money(position.get("realized_pnl"))
+        commissions = sum(_money(value) for value in position.get("commissions", []))
+        quantity = float(position.get("peak_qty", 0) or 0)
+        slippage = quantity * 0.1 * 2.0
+        gross = net + commissions
+        total_cost = commissions + slippage
+        scenarios["0x"].append(gross)
+        scenarios["1x"].append(gross - total_cost)
+        scenarios["2x"].append(gross - 2.0 * total_cost)
+
+    def summarize(pnls: list[float]) -> dict[str, float]:
+        gross_profit = sum(value for value in pnls if value > 0)
+        gross_loss = -sum(value for value in pnls if value < 0)
+        return {
+            "net_pnl": sum(pnls),
+            "expectancy_r": sum(pnls) / len(pnls) / risk_usdt if pnls else 0.0,
+            "profit_factor": gross_profit / gross_loss if gross_loss > 0 else 0.0,
+        }
+
+    summarized = {key: summarize(value) for key, value in scenarios.items()}
+    one_x = scenarios["1x"]
+    return {
+        "round_trip_trades": len(one_x),
+        "win_rate_round_trip": (
+            sum(1 for value in one_x if value > 0) / len(one_x) if one_x else 0.0
+        ),
+        "avg_r": summarized["1x"]["expectancy_r"],
+        "net_expectancy_r": summarized["1x"]["expectancy_r"],
+        "profit_factor_net": summarized["1x"]["profit_factor"],
+        "cost_sensitivity": summarized,
+    }
+
+
 def _records(value: Any) -> list[dict[str, Any]]:
     return [dict(row) for row in data.to_records(value)]
 
@@ -120,6 +169,7 @@ def _run_historical() -> None:
         ohlcv_data={"BTCUSDT.BITGET": frame},
         spec=runtime.backtest_spec,
     )
+    trade_metrics = _trade_metrics(result, float(_cfg()["risk_usdt"]))
     _write_report(result, frame)
     chart_path = backtest.generate_chart(result)
     summary = dict(result.summary or {})
@@ -131,14 +181,21 @@ def _run_historical() -> None:
         "profit_factor": _finite(result.profit_factor),
         "win_rate": _finite(result.win_rate),
         "total_trades": result.total_trades,
+        "round_trip_trades": trade_metrics["round_trip_trades"],
+        "win_rate_round_trip": trade_metrics["win_rate_round_trip"],
         "rows": len(frame),
-        "avg_r": None,
-        "net_expectancy_r": None,
-        "cost_sensitivity_0x": None,
-        "cost_sensitivity_1x": None,
-        "cost_sensitivity_2x": None,
+        "avg_r": trade_metrics["avg_r"],
+        "net_expectancy_r": trade_metrics["net_expectancy_r"],
+        "profit_factor_net": trade_metrics["profit_factor_net"],
+        "cost_sensitivity_0x": trade_metrics["cost_sensitivity"]["0x"]["expectancy_r"],
+        "cost_sensitivity_1x": trade_metrics["cost_sensitivity"]["1x"]["expectancy_r"],
+        "cost_sensitivity_2x": trade_metrics["cost_sensitivity"]["2x"]["expectancy_r"],
     }
-    verdict = "PENDING_FEWER_THAN_30_TRADES" if result.total_trades < 30 else "PENDING_FORWARD"
+    verdict = (
+        "PENDING_FEWER_THAN_30_TRADES"
+        if trade_metrics["round_trip_trades"] < 30
+        else "PENDING_FUNDING_AND_FORWARD"
+    )
     runtime.emit_signal(
         action="watch",
         symbol=SYMBOL,
@@ -150,11 +207,10 @@ def _run_historical() -> None:
             "period_start": frame.index.min().isoformat(),
             "period_end": frame.index.max().isoformat(),
             "walk_forward_split": "50% development / 50% out-of-sample validation",
+            "cost_sensitivity": trade_metrics["cost_sensitivity"],
             "pending": [
                 "account-tier fees",
                 "funding-inclusive trade ledger",
-                "cost sensitivity",
-                "R-multiple statistics",
             ],
         },
     )
@@ -211,26 +267,30 @@ def _atr(rows: list[dict[str, Any]], period: int) -> Decimal:
 
 
 def _adx(rows: list[dict[str, Any]], period: int) -> Decimal:
-    plus = Decimal("0")
-    minus = Decimal("0")
-    true_range = Decimal("0")
-    for idx in range(len(rows) - period, len(rows)):
-        high = Decimal(str(rows[idx]["high"]))
-        low = Decimal(str(rows[idx]["low"]))
-        previous_high = Decimal(str(rows[idx - 1]["high"]))
-        previous_low = Decimal(str(rows[idx - 1]["low"]))
-        previous_close = Decimal(str(rows[idx - 1]["close"]))
-        up = high - previous_high
-        down = previous_low - low
-        plus += up if up > down and up > 0 else Decimal("0")
-        minus += down if down > up and down > 0 else Decimal("0")
-        true_range += max(high - low, abs(high - previous_close), abs(low - previous_close))
-    if true_range <= 0:
-        return Decimal("0")
-    plus_di = Decimal("100") * plus / true_range
-    minus_di = Decimal("100") * minus / true_range
-    denominator = plus_di + minus_di
-    return Decimal("0") if denominator <= 0 else Decimal("100") * abs(plus_di - minus_di) / denominator
+    dx_values: list[Decimal] = []
+    for end in range(len(rows) - period + 1, len(rows) + 1):
+        plus = Decimal("0")
+        minus = Decimal("0")
+        true_range = Decimal("0")
+        for idx in range(end - period, end):
+            high = Decimal(str(rows[idx]["high"]))
+            low = Decimal(str(rows[idx]["low"]))
+            previous_high = Decimal(str(rows[idx - 1]["high"]))
+            previous_low = Decimal(str(rows[idx - 1]["low"]))
+            previous_close = Decimal(str(rows[idx - 1]["close"]))
+            up = high - previous_high
+            down = previous_low - low
+            plus += up if up > down and up > 0 else Decimal("0")
+            minus += down if down > up and down > 0 else Decimal("0")
+            true_range += max(high - low, abs(high - previous_close), abs(low - previous_close))
+        if true_range <= 0:
+            continue
+        plus_di = Decimal("100") * plus / true_range
+        minus_di = Decimal("100") * minus / true_range
+        denominator = plus_di + minus_di
+        if denominator > 0:
+            dx_values.append(Decimal("100") * abs(plus_di - minus_di) / denominator)
+    return sum(dx_values, Decimal("0")) / Decimal(len(dx_values)) if dx_values else Decimal("0")
 
 
 def _emit_hold(code: str, metrics: dict[str, Any], state: dict[str, Any]) -> None:
@@ -448,12 +508,19 @@ def _run_live() -> None:
         symbol=SYMBOL,
         interval="1h",
         exchange="bitget",
-        limit=max(int(cfg["atr_percentile_lookback"]) + 20, 220),
+        limit=max(
+            int(cfg["atr_percentile_lookback"]) + 20,
+            int(cfg["long_trend_period"]) + int(cfg["trend_slope_hours"]) + 2,
+        ),
         days=10,
         closed_only=True,
     )
     rows = _records(bars)
-    if len(rows) < 200:
+    minimum_rows = max(
+        int(cfg["atr_percentile_lookback"]) + int(cfg["atr_period"]),
+        int(cfg["long_trend_period"]) + int(cfg["trend_slope_hours"]),
+    )
+    if len(rows) < minimum_rows:
         _emit_hold("INSUFFICIENT_BARS", {"rows": len(rows)}, state)
         return
     last_bar_ms = _timestamp_ms(rows[-1].get("date"))
@@ -470,8 +537,17 @@ def _run_live() -> None:
     atr_percentile = Decimal("100") * Decimal(sum(1 for value in atr_samples if value <= atr)) / Decimal(len(atr_samples))
     breakout = max(Decimal(str(row["high"])) for row in rows[-int(cfg["breakout_period"]) - 1 : -1])
     close = closes[-1]
+    trend_period = int(cfg["long_trend_period"])
+    trend_slope_hours = int(cfg["trend_slope_hours"])
+    trend_now = _ema(closes[-trend_period:], trend_period)
+    trend_then = _ema(
+        closes[-trend_period - trend_slope_hours : -trend_slope_hours],
+        trend_period,
+    )
     signal_ok = (
         close > breakout
+        and close > trend_now
+        and trend_now > trend_then
         and adx >= Decimal(str(cfg["adx_min"]))
         and Decimal(str(cfg["atr_percentile_min"])) <= atr_percentile <= Decimal(str(cfg["atr_percentile_max"]))
     )

@@ -19,11 +19,13 @@ class BtcNetExpectancyConfig(StrategyConfig):
     atr_period: int = 14
     atr_stop_multiple: str = "1.5"
     adx_period: int = 14
-    adx_min: str = "25"
-    breakout_period: int = 20
+    adx_min: str = "30"
+    breakout_period: int = 48
+    long_trend_period: int = 200
+    trend_slope_hours: int = 24
     atr_percentile_lookback: int = 168
-    atr_percentile_min: str = "20"
-    atr_percentile_max: str = "90"
+    atr_percentile_min: str = "30"
+    atr_percentile_max: str = "75"
     take_profit_r: str = "2"
     time_stop_hours: int = 8
     order_ttl_hours: int = 4
@@ -111,6 +113,7 @@ class BtcNetExpectancyStrategy(Strategy):
         warmup = max(
             self.cfg.breakout_period + 1,
             self.cfg.adx_period * 2 + 1,
+            self.cfg.long_trend_period + self.cfg.trend_slope_hours,
             self.cfg.atr_percentile_lookback + self.cfg.atr_period,
             24,
         )
@@ -123,10 +126,19 @@ class BtcNetExpectancyStrategy(Strategy):
             atr,
         )
         prior_high = max(self._highs[-self.cfg.breakout_period - 1 : -1])
+        trend_now = self._ema(self._closes[-self.cfg.long_trend_period :])
+        trend_then = self._ema(
+            self._closes[
+                -self.cfg.long_trend_period - self.cfg.trend_slope_hours :
+                -self.cfg.trend_slope_hours
+            ]
+        )
         quote_volume_24h = sum(
             self._volumes[-24 + i] * self._closes[-24 + i] for i in range(24)
         )
         if close <= prior_high:
+            return
+        if close <= trend_now or trend_now <= trend_then:
             return
         if adx < float(self.cfg.adx_min):
             return
@@ -177,27 +189,41 @@ class BtcNetExpectancyStrategy(Strategy):
             self.submit_order(order)
 
     def _adx(self, period: int) -> float:
-        start = max(1, len(self._closes) - period)
-        plus_dm: list[float] = []
-        minus_dm: list[float] = []
-        trs: list[float] = []
-        for idx in range(start, len(self._closes)):
-            up = self._highs[idx] - self._highs[idx - 1]
-            down = self._lows[idx - 1] - self._lows[idx]
-            plus_dm.append(up if up > down and up > 0 else 0.0)
-            minus_dm.append(down if down > up and down > 0 else 0.0)
-            trs.append(self._trs[idx])
-        tr_sum = sum(trs)
-        if tr_sum <= 0:
-            return 0.0
-        plus_di = 100.0 * sum(plus_dm) / tr_sum
-        minus_di = 100.0 * sum(minus_dm) / tr_sum
-        denominator = plus_di + minus_di
-        return 0.0 if denominator <= 0 else 100.0 * abs(plus_di - minus_di) / denominator
+        dx_values: list[float] = []
+        first_end = max(period + 1, len(self._closes) - period + 1)
+        for end in range(first_end, len(self._closes) + 1):
+            start = end - period
+            plus_dm = 0.0
+            minus_dm = 0.0
+            tr_sum = 0.0
+            for idx in range(start, end):
+                up = self._highs[idx] - self._highs[idx - 1]
+                down = self._lows[idx - 1] - self._lows[idx]
+                plus_dm += up if up > down and up > 0 else 0.0
+                minus_dm += down if down > up and down > 0 else 0.0
+                tr_sum += self._trs[idx]
+            if tr_sum <= 0:
+                continue
+            plus_di = 100.0 * plus_dm / tr_sum
+            minus_di = 100.0 * minus_dm / tr_sum
+            denominator = plus_di + minus_di
+            if denominator > 0:
+                dx_values.append(100.0 * abs(plus_di - minus_di) / denominator)
+        return self._mean(dx_values[-period:])
 
     @staticmethod
     def _mean(values: list[float]) -> float:
         return sum(values) / len(values) if values else 0.0
+
+    @staticmethod
+    def _ema(values: list[float]) -> float:
+        if not values:
+            return 0.0
+        alpha = 2.0 / (len(values) + 1)
+        current = values[0]
+        for value in values[1:]:
+            current = alpha * value + (1.0 - alpha) * current
+        return current
 
     @staticmethod
     def _percentile_rank(values: list[float], current: float) -> float:
