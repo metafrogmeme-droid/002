@@ -1,0 +1,143 @@
+name: btc-eth-sol-perp-trend-v1
+display_name: "BTC/ETH/SOL Perp Trend Pullback v1"
+display_name_i18n:
+  en: "BTC/ETH/SOL Perp Trend Pullback v1"
+  zh: "BTC/ETH/SOL 永续趋势回调策略 v1"
+  zh-tw: "BTC/ETH/SOL 永續趨勢回調策略 v1"
+  es: "Tendencia con retroceso en perpetuos BTC/ETH/SOL v1"
+  ja: "BTC/ETH/SOL 無期限先物 トレンド押し目戦略 v1"
+  vi: "Chiến lược xu hướng hồi giá hợp đồng vĩnh cửu BTC/ETH/SOL v1"
+version: "1.0.0"
+description: "Long-only, regime-filtered trend pullback strategy on BTCUSDT, ETHUSDT and SOLUSDT USDT-M perpetuals with fixed-USDT risk per trade"
+description_i18n:
+  en: "Long-only, regime-filtered trend pullback strategy on BTCUSDT, ETHUSDT and SOLUSDT USDT-M perpetuals with fixed-USDT risk per trade"
+  zh: "仅做多、带市场状态过滤的趋势回调策略，交易 BTCUSDT、ETHUSDT、SOLUSDT USDT 本位永续合约，每笔固定 USDT 风险"
+  zh-tw: "僅做多、帶市場狀態過濾的趨勢回調策略，交易 BTCUSDT、ETHUSDT、SOLUSDT USDT 本位永續合約，每筆固定 USDT 風險"
+  es: "Estrategia solo largos de retroceso en tendencia con filtro de régimen en perpetuos USDT-M de BTCUSDT, ETHUSDT y SOLUSDT, riesgo fijo en USDT por operación"
+  ja: "BTCUSDT・ETHUSDT・SOLUSDT の USDT 建て無期限先物を対象とした、相場環境フィルター付きロング専用トレンド押し目戦略。1 トレードあたり固定 USDT リスク"
+  vi: "Chiến lược chỉ mua theo xu hướng hồi giá có bộ lọc trạng thái thị trường trên hợp đồng vĩnh cửu USDT-M BTCUSDT, ETHUSDT và SOLUSDT, rủi ro cố định bằng USDT mỗi lệnh"
+long_description: |
+  This Playbook is a long-only trend-following strategy for the BTC, ETH and
+  SOL USDT-margined perpetual contracts on Bitget. Its thesis is that when a
+  market is already trending with healthy but not extreme volatility, shallow
+  pullbacks toward the short-term trend line that are bought back with
+  above-normal volume tend to resolve in the direction of the trend. The
+  Playbook is designed to stay out of range-bound chop, dead quiet markets
+  and volatility blow-offs, and to trade only the orderly part of an uptrend.
+
+  Entry decisions are driven by a regime read first and a trigger second. The
+  regime read combines a directional-strength measure with a rolling
+  percentile of volatility relative to price; only when strength is high and
+  volatility sits inside its normal band is the market considered tradable.
+  Within that regime the strategy enters long when price has pulled back to
+  the faster moving average and then closes back above it while the faster
+  average is above the slower one and buying volume is clearly elevated. It
+  refuses to enter around funding settlements and when funding would be paid
+  against the long. Entries use a limit order at the signal price that is
+  cancelled if it does not fill within a short window.
+
+  Every position carries an exchange-side stop loss and take profit attached
+  to the entry order itself, sized so that the loss at the stop is a fixed
+  amount of USDT. The take profit is a fixed multiple of that risk. A time
+  stop closes positions that have not resolved, a daily loss limit pauses and
+  then stops new entries, and a streak of consecutive losses halts trading.
+  Shorts are disabled in this version.
+
+  Subscribers may adjust the margin budget, which caps the isolated margin in
+  use and is the denominator for reported returns; the leverage, which only
+  changes margin per position and never the USDT risk per trade; the fixed
+  USDT risk per trade, which scales every position proportionally; and the
+  symbol universe, where fewer symbols mean fewer, more concentrated setups.
+
+  The strategy underperforms in sideways markets that briefly look trending,
+  during news-driven gaps that jump through the stop, and in prolonged bear
+  phases where it simply sits out. Fees, slippage and funding are deducted in
+  all reported figures, but live fills can still be worse than the replay.
+  Historical performance is not a promise of future results; a drawdown of
+  several consecutive stops is expected, so do not risk capital you cannot
+  afford to lose.
+market_type: contract
+trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+output_kind: trade_strategy
+tags: ["trend", "pullback", "adx", "atr", "btc", "eth", "sol", "contract", "long-only", "risk-managed"]
+schedule:
+  cron: "1 * * * *"
+  tz: "UTC"
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+
+strategy_config:
+  trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+  margin_budget: "1500"
+  leverage: 5
+  risk_per_trade_usdt: 15
+  # --- regime filter (1H) ---
+  adx_period: 14
+  adx_min: 25
+  atr_period: 14
+  atr_pct_lookback_bars: 720
+  atr_pct_min: 20
+  atr_pct_max: 90
+  # --- trigger ---
+  ema_fast: 20
+  ema_slow: 50
+  volume_avg_bars: 20
+  volume_multiple: 1.5
+  # --- exits ---
+  stop_atr_multiple: 1.5
+  take_profit_r: 2.0
+  entry_ttl_hours: 4
+  time_stop_hours: 8
+  # --- portfolio / halt rules ---
+  max_concurrent_positions: 3
+  daily_pause_loss_usdt: 30
+  daily_stop_loss_usdt: 40
+  max_consecutive_losses: 5
+  funding_window_minutes: 15
+  max_funding_rate_pct: 0.03
+  slippage_ticks: 1
+  side_mode: long_only
+  # --- replay window / validation ---
+  backtest_lookback_days: 730
+  walk_forward_train_months: 12
+  walk_forward_test_months: 3
+
+user_config_schema:
+  trading_symbols:
+    type: array
+    item_type: string
+    default: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    options: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    aliases:
+      btc: BTCUSDT
+      bitcoin: BTCUSDT
+      eth: ETHUSDT
+      ethereum: ETHUSDT
+      sol: SOLUSDT
+      solana: SOLUSDT
+    min_items: 1
+    max_items: 3
+    label: "Trading symbols"
+  margin_budget:
+    type: string
+    default: "1500"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Margin budget USDT (isolated margin cap and return denominator)"
+  leverage:
+    type: integer
+    default: 5
+    min: 1
+    max: 5
+    aliases:
+      3x: 3
+      5x: 5
+    label: "Leverage (hard cap 5x; changes margin, not risk)"
+  risk_per_trade_usdt:
+    type: number
+    default: 15
+    min: 5
+    max: 50
+    label: "Fixed loss at stop per trade (USDT)"
