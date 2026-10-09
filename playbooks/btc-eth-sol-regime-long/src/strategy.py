@@ -119,7 +119,8 @@ class RegimeLongStrategy(Strategy):
         bar_types = list(self.cfg.bar_types) or ([self.cfg.bar_type] if self.cfg.bar_type else [])
         if not bar_types:
             raise RuntimeError("no bar types configured")
-        for bt in bar_types:
+        for raw_bt in bar_types:
+            bt = BarType.from_str(raw_bt) if isinstance(raw_bt, str) else raw_bt
             inst = self.cache.instrument(bt.instrument_id)
             if inst is None:
                 raise RuntimeError(f"instrument {bt.instrument_id} missing from cache")
