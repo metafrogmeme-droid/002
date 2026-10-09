@@ -18,6 +18,8 @@ from report import activation_verdict  # noqa: E402
 from risk import (  # noqa: E402
     ClosedTrade,
     exposure_hits_blackout,
+    funding_page_ignores_window,
+    funding_rate_from_managed,
     in_funding_blackout,
     plan_long_size,
 )
@@ -173,6 +175,18 @@ class RiskTests(unittest.TestCase):
         self.assertTrue(in_funding_blackout(before_midnight, 15))
         self.assertTrue(in_funding_blackout(datetime(2026, 10, 9, 8, 0, tzinfo=timezone.utc), 15))
         self.assertFalse(in_funding_blackout(datetime(2026, 10, 9, 3, 0, tzinfo=timezone.utc), 15))
+
+    def test_managed_funding_percent_display_is_scaled(self):
+        decimal_rate = funding_rate_from_managed(0.004)
+        self.assertAlmostEqual(decimal_rate, 0.00004)
+        self.assertLess(decimal_rate, 0.0003)
+        self.assertGreater(0.004, 0.0003)
+
+    def test_repeated_latest_funding_page_is_not_coverage(self):
+        # 2026-07-12T00:00:00Z against a cursor parked on that same instant.
+        self.assertTrue(funding_page_ignores_window(1783814400000, 1791504000000, 1783814400000, 4 * 60 * 60 * 1000))
+        # A page that actually starts before the requested end is usable.
+        self.assertFalse(funding_page_ignores_window(1728432000000, 1733616000000, 1733616000000, 4 * 60 * 60 * 1000))
 
     def test_exposure_window_overlaps_funding(self):
         start = datetime(2026, 10, 9, 7, 0, tzinfo=timezone.utc)

@@ -11,6 +11,28 @@ from typing import Sequence
 
 
 FUNDING_HOURS = (0, 8, 16)
+# bitget_data funding_rate is the percent display of the decimal rate.
+# Public BTCUSDT settlement 0.00004 at 2026-10-09T16:00:00Z matched managed
+# funding_rate 0.004 on the bar whose funding_timestamp is that instant.
+MANAGED_FUNDING_PERCENT_SCALE = 100.0
+
+
+def funding_rate_from_managed(raw: float) -> float:
+    """Convert a managed funding_rate percent display into a decimal rate."""
+    return raw / MANAGED_FUNDING_PERCENT_SCALE
+
+
+def funding_page_ignores_window(
+    earliest_ms: int, latest_ms: int, cursor_end_ms: int, interval_ms: int
+) -> bool:
+    """True when a page did not start earlier than the end it was given.
+
+    A historical request that comes back as the latest page is not coverage.
+    Callers keep the rows they already have and leave the older gap empty.
+    """
+    if earliest_ms >= cursor_end_ms:
+        return True
+    return latest_ms > cursor_end_ms and earliest_ms >= cursor_end_ms - interval_ms
 
 
 def _decimal(value: float | Decimal | str) -> Decimal:

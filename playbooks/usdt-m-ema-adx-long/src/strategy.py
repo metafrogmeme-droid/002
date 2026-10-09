@@ -543,7 +543,7 @@ class EmaAdxLongStrategy(Strategy):
             from features import DataCoverageError, fetch_funding
         for symbol in cfg.trading_symbols:
             try:
-                rows, _argument = fetch_funding(symbol, start_ms, end_ms)
+                rows, _info = fetch_funding(symbol, start_ms, end_ms)
             except (DataCoverageError, Exception):
                 self._funding_blocked = True
                 continue
@@ -678,12 +678,9 @@ def _funding_points_from_rows(rows: list[dict[str, Any]]) -> list[tuple[int, flo
     points: list[tuple[int, float]] = []
     for row in rows:
         raw_time = row.get("time") or row.get("timestamp") or row.get("date") or row.get("funding_ts")
-        try:
-            stamp = int(float(raw_time))
-        except (TypeError, ValueError):
+        stamp = _epoch_ms(raw_time)
+        if stamp is None:
             continue
-        if stamp < 10_000_000_000:
-            stamp *= 1000
         try:
             rate = float(row.get("funding_rate"))
         except (TypeError, ValueError):
@@ -692,6 +689,28 @@ def _funding_points_from_rows(rows: list[dict[str, Any]]) -> list[tuple[int, flo
             points.append((stamp, rate))
     points.sort(key=lambda item: item[0])
     return points
+
+
+def _epoch_ms(raw: Any) -> int | None:
+    """Accept a millisecond epoch or an ISO-8601 timestamp. Never invent one."""
+    if raw is None or raw == "":
+        return None
+    try:
+        stamp = int(float(raw))
+    except (TypeError, ValueError):
+        if not isinstance(raw, str):
+            return None
+        text = raw.strip().replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return int(parsed.timestamp() * 1000)
+    if stamp < 10_000_000_000:
+        stamp *= 1000
+    return stamp
 
 
 def _funding_points(frame: Any) -> list[tuple[int, float]]:

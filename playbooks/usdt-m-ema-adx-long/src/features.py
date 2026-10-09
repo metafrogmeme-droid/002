@@ -133,37 +133,174 @@ def fetch_klines(symbol: str, start_ms: int, end_ms: int) -> list[dict[str, Any]
     return rows
 
 
-def fetch_funding(symbol: str, start_ms: int, end_ms: int) -> tuple[list[dict[str, Any]], str]:
-    """Return funding rows and the symbol argument that produced them.
+def fetch_funding(symbol: str, start_ms: int, end_ms: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Return decimal funding rows and the walk that produced them.
 
-    The documented funding endpoint notes that some providers expect a base
-    asset. Try the exchange-native pair first, then the base asset. Keep the
-    first non-empty result and report which argument worked.
+    Pages move the request end backward. A page that does not start earlier
+    than the end it was given is a stalled window: those rows are kept, and
+    the gap back to `start_ms` is left empty. Missing rates are not filled
+    with zero. The pair symbol is tried before the base asset. Among
+    non-empty walks, the earliest series wins, then the one with more rows.
+
+    Measured on 2026-10-10: `crypto.futures.funding_rate` with
+    start_time=1728432000000 (2024-10-09) still returned bitget_data rows
+    whose first `timestamp` is 2026-07-12T00:00:00Z. The same first timestamp
+    came back with end_time set to that 2024 boundary, with no window, and
+    with days=90. Interval 8h is rejected. Symbol BTC (base) is empty.
     """
+    try:
+        from .risk import funding_rate_from_managed
+    except ImportError:
+        from risk import funding_rate_from_managed
+
     base = symbol[:-4] if symbol.endswith("USDT") else symbol
-    last_error = "no rows"
+    attempts: list[dict[str, Any]] = []
+    best_rows: list[dict[str, Any]] | None = None
+    best_info: dict[str, Any] | None = None
+    best_rank: tuple[int, int] | None = None
     for candidate in (symbol, base):
-        pages = []
+        for interval in ("4h", "1d", "1h"):
+            rows, info = _walk_funding(candidate, interval, start_ms, end_ms)
+            attempts.append(info)
+            if not rows:
+                continue
+            scaled = _scale_funding_rows(rows, funding_rate_from_managed)
+            earliest = int(info.get("earliest_ms") or 0)
+            rank = (earliest, -len(scaled))
+            if best_rank is None or rank < best_rank:
+                best_rank = rank
+                best_rows = scaled
+                best_info = info
+    if not best_rows or best_info is None:
+        raise DataCoverageError(
+            f"{symbol}: funding_rate unavailable ({_attempt_summary(attempts)})"
+        )
+    best_info = dict(best_info)
+    best_info["attempts"] = [
+        {
+            "symbol": item.get("symbol"),
+            "interval": item.get("interval"),
+            "rows": item.get("rows"),
+            "earliest_ms": item.get("earliest_ms"),
+            "latest_ms": item.get("latest_ms"),
+            "stalled": item.get("stalled"),
+        }
+        for item in attempts
+    ]
+    return best_rows, best_info
+
+
+def _attempt_summary(attempts: list[dict[str, Any]]) -> str:
+    if not attempts:
+        return "no requests"
+    parts = []
+    for item in attempts:
+        parts.append(
+            f"{item.get('symbol')}/{item.get('interval')}:{item.get('stalled') or item.get('rows')}"
+        )
+    return "; ".join(parts)
+
+
+def _scale_funding_rows(rows: list[dict[str, Any]], scaler: Any) -> list[dict[str, Any]]:
+    scaled: list[dict[str, Any]] = []
+    for row in rows:
         try:
-            for chunk_start, chunk_end in _chunk_bounds(start_ms, end_ms, FUNDING_CHUNK_MS):
-                pages.append(
-                    data.crypto.futures.funding_rate(
-                        symbol=candidate,
-                        exchange="bitget",
-                        interval="1h",
-                        start_time=chunk_start,
-                        end_time=chunk_end,
-                        limit=1000,
-                    )
-                )
-        except Exception as exc:
-            last_error = f"{candidate}: {type(exc).__name__}"
+            rate = scaler(float(row.get("funding_rate")))
+        except (TypeError, ValueError):
             continue
-        rows = _stitch(pages)
-        if rows:
-            return rows, candidate
-        last_error = f"{candidate}: empty"
-    raise DataCoverageError(f"{symbol}: funding_rate unavailable ({last_error})")
+        if rate != rate or rate in (float("inf"), float("-inf")):
+            continue
+        copied = dict(row)
+        copied["funding_rate"] = rate
+        scaled.append(copied)
+    return scaled
+
+
+def _walk_funding(
+    candidate: str, interval: str, start_ms: int, end_ms: int
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Walk `end_time` backward until the series reaches `start_ms` or stalls."""
+    try:
+        from .risk import funding_page_ignores_window
+    except ImportError:
+        from risk import funding_page_ignores_window
+
+    interval_ms = {"1h": HOUR_MS, "4h": 4 * HOUR_MS, "1d": 24 * HOUR_MS}[interval]
+    page_span = min(80 * 24 * HOUR_MS, 900 * interval_ms)
+    collected: dict[int, dict[str, Any]] = {}
+    cursor_end = end_ms
+    stalled = ""
+    pages = 0
+    first_request: dict[str, Any] | None = None
+    while cursor_end > start_ms and pages < 24:
+        cursor_start = max(start_ms, cursor_end - page_span)
+        pages += 1
+        try:
+            page = data.crypto.futures.funding_rate(
+                symbol=candidate,
+                exchange="bitget",
+                interval=interval,
+                start_time=cursor_start,
+                end_time=cursor_end,
+                limit=1000,
+            )
+        except Exception as exc:
+            stalled = type(exc).__name__
+            if first_request is None:
+                first_request = {
+                    "start_time": cursor_start,
+                    "end_time": cursor_end,
+                    "error": stalled,
+                }
+            break
+        page_rows = _stitch([page])
+        times = [stamp for stamp in (_time_ms(row) for row in page_rows) if stamp is not None]
+        if not times:
+            stalled = "empty"
+            if first_request is None:
+                first_request = {
+                    "start_time": cursor_start,
+                    "end_time": cursor_end,
+                    "rows": 0,
+                }
+            break
+        earliest, latest = min(times), max(times)
+        if first_request is None:
+            first_request = {
+                "start_time": cursor_start,
+                "end_time": cursor_end,
+                "rows": len(page_rows),
+                "earliest_ms": earliest,
+                "latest_ms": latest,
+            }
+        for row in page_rows:
+            stamp = _time_ms(row)
+            if stamp is not None and stamp <= end_ms:
+                collected[stamp] = row
+        if funding_page_ignores_window(earliest, latest, cursor_end, interval_ms):
+            stalled = "window_ignored"
+            break
+        if earliest <= start_ms:
+            break
+        if earliest >= cursor_end:
+            stalled = "window_ignored"
+            break
+        cursor_end = earliest
+    rows = [collected[stamp] for stamp in sorted(collected)]
+    earliest_ms = min(collected) if collected else None
+    latest_ms = max(collected) if collected else None
+    if rows and earliest_ms is not None and earliest_ms > start_ms and not stalled:
+        stalled = "short_of_start"
+    return rows, {
+        "symbol": candidate,
+        "interval": interval,
+        "rows": len(rows),
+        "earliest_ms": earliest_ms,
+        "latest_ms": latest_ms,
+        "stalled": stalled,
+        "pages": pages,
+        "first_request": first_request or {},
+    }
 
 
 def _bars_for_replay(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -199,7 +336,8 @@ def _funding_for_replay(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def build_replay_frame(symbol: str, start_ms: int, end_ms: int) -> tuple[Any, dict[str, Any]]:
     native = resolve_bitget_perpetual(symbol)
     bars = fetch_klines(native, start_ms, end_ms)
-    funding_rows, funding_symbol = fetch_funding(native, start_ms, end_ms)
+    funding_rows, funding_info = fetch_funding(native, start_ms, end_ms)
+    funding_symbol = str(funding_info.get("symbol") or native)
     frame = backtest.build_feature_frame(
         _bars_for_replay(bars),
         base_datetime_index="time",
@@ -226,6 +364,11 @@ def build_replay_frame(symbol: str, start_ms: int, end_ms: int) -> tuple[Any, di
         "symbol": native,
         "requested_symbol": symbol,
         "funding_symbol_argument": funding_symbol,
+        "funding_interval": funding_info.get("interval"),
+        "funding_stalled": funding_info.get("stalled"),
+        "funding_pages": funding_info.get("pages"),
+        "funding_first_request": funding_info.get("first_request"),
+        "funding_scale": "managed_percent_display_divided_by_100",
         "kline_rows": len(bars),
         "funding_rows": len(funding_rows),
         "kline_first_ms": _time_ms(bars[0]),

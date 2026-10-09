@@ -142,4 +142,10 @@ Quiet bars (`FILTER_NO_CROSS`, `INSUFFICIENT_HISTORY`) are not logged. No live o
 
 ## Validation status
 
-PENDING. Local unit tests check the decision rules. They are not a backtest. Trades, win rate, average R, net expectancy, profit factor, max drawdown, and Sharpe are not invented here. Activation requires a two-year replay with funding coverage, at least 30 trades, positive net expectancy at 1x and 2x costs, a defined profit factor, a finite engine Sharpe, a verified fee tier, and a later live sample of at least 30 trades that passes PF ≥ 1.3 and Sharpe ≥ 0.5. Current verdict: do not activate.
+PENDING. Local unit tests check the decision rules. They are not a backtest. Trades, win rate, average R, net expectancy, profit factor, max drawdown, and Sharpe are not invented here.
+
+Funding history does not cover the locked window 2024-10-09 through 2026-10-09. On 2026-10-10, `GET /api/v1/agent-data/crypto/futures/funding_rate` (`crypto.futures.funding_rate`, provider `bitget_data`) for BTCUSDT, ETHUSDT, and SOLUSDT returned `{id, provider, results, warnings, extra, chart}`. A request with `start_time=1728432000000` and `end_time=1733616000000` (2024-10-09 through 2024-12-08), the same request with `end_time=1728432000000`, a request with no window, and `days=90` all returned the same recent series. Earliest `results[0].timestamp` is 2026-07-12T00:00:00Z for `1d` (90 rows) and `4h` (540 rows). `1h` is capped at 1000 rows and starts at 2026-08-29T05:00:00Z. Interval `8h` is HTTP 422. Symbol `BTC` is HTTP 204. Public `GET /api/v2/mix/market/history-fund-rate` pages to the same floor: 270 settlements, oldest 2026-07-12T00:00:00Z, newest 2026-10-09T16:00:00Z, for all three symbols. Missing rates stay empty. The kline window is not shortened to match them.
+
+Sandbox run `pbrun-f7897e91b6f8` on draft `2e317d26-a835-4111-8b29-cf605dab5459` returned 17520 1H klines from 2024-10-09T00:00:00Z through 2026-10-08T23:00:00Z and funding only from 2026-08-29. Author net metrics are PENDING. Engine totals of zero are an empty sample.
+
+Activation requires a two-year replay with funding coverage, at least 30 trades, positive net expectancy at 1x and 2x costs, a defined profit factor, a finite engine Sharpe, a verified fee tier, and a later live sample of at least 30 trades that passes PF ≥ 1.3 and Sharpe ≥ 0.5. Current verdict: do not activate.

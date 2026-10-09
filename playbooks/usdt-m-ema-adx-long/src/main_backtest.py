@@ -167,6 +167,9 @@ def _finish(cfg: Any, result: Any, coverage: list[dict[str, Any]], start_ms: int
                         "funding_first_ms": item.get("funding_first_ms"),
                         "funding_last_ms": item.get("funding_last_ms"),
                         "funding_symbol_argument": item.get("funding_symbol_argument"),
+                        "funding_interval": item.get("funding_interval"),
+                        "funding_stalled": item.get("funding_stalled"),
+                        "funding_pages": item.get("funding_pages"),
                         "index_first": item.get("index_first"),
                         "index_last": item.get("index_last"),
                     }
