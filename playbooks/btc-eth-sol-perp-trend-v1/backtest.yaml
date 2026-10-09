@@ -67,7 +67,10 @@ instruments:
 # No execution.start/end: the replay covers every fetched bar; the strategy
 # itself only becomes trade-eligible after the indicator warm-up, and
 # main_backtest.py reports the effective eligible window.
-
-data_requirements:
-  required_bar_fields:
-    - funding_rate
+#
+# funding_rate is NOT declared under data_requirements.required_bar_fields on
+# purpose: the platform's own bootstrap replay feeds plain OHLCV frames into
+# backtest.run() and fails hard on that declaration. main_backtest.py still
+# attaches funding_rate to the replay frames and persists it to a cache the
+# strategy reads; when no funding history is reachable the strategy degrades
+# explicitly (filter not applied, fallback rate charged, both counted).

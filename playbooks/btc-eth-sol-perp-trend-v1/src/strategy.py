@@ -163,9 +163,13 @@ class PerpTrendStrategy(Strategy):
                 except (ValueError, TypeError):
                     table = {}
         if not table:
-            raise RuntimeError(
-                f"funding_rate feature missing for {symbol}: replay requires funding data "
-                "(feature frame or cache). Refusing to run with silently-disabled funding."
+            # No funding history reachable (e.g. the platform's own bootstrap replay feeds
+            # plain OHLCV). Degrade explicitly: the funding filter is not applied and every
+            # settlement is charged at the labelled fallback rate; both are counted in stats.
+            self.stats.setdefault("funding_source", {})[symbol] = "none"
+        else:
+            self.stats.setdefault("funding_source", {})[symbol] = (
+                "feature_frame" if frame is not None and "funding_rate" in getattr(frame, "columns", []) else "cache"
             )
         self._funding[symbol] = table
         self._funding_sorted[symbol] = sorted(table)

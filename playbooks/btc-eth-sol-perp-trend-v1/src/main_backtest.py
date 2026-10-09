@@ -225,6 +225,16 @@ def _spec_copy() -> dict[str, Any]:
     return payload
 
 
+def _output_dirs() -> list[Path]:
+    # The Runner documents /workspace/output/, but the sandbox resolves report
+    # artifacts relative to the package directory; write both when they differ.
+    dirs = [OUTPUT_DIR]
+    local = Path.cwd() / "output"
+    if local.resolve() != OUTPUT_DIR.resolve():
+        dirs.append(local)
+    return dirs
+
+
 def _load_trade_log() -> dict[str, Any]:
     if S.LAST_RUN:
         return dict(S.LAST_RUN)
@@ -399,8 +409,12 @@ def run() -> None:
     raw["starting_balance"] = starting_balance
     raw["margin_budget"] = margin_budget
     raw["metrics_basis"] = "strategy"
-    raw["account_total_return_pct"] = result.total_return_pct
-    raw["account_max_drawdown_pct"] = result.max_drawdown_pct
+    raw["account_total_return_pct"] = round(net_pnl / starting_balance * 100.0, 6)
+    # Same closed-trade drawdown expressed against the venue starting balance, so a
+    # platform-side rescale (x starting_balance / margin_budget) lands on the strategy figure.
+    raw["account_max_drawdown_pct"] = round(float(full["max_drawdown_usdt"]) / starting_balance * 100.0, 6)
+    raw["engine_total_return_pct"] = result.total_return_pct
+    raw["engine_max_drawdown_pct"] = result.max_drawdown_pct
     raw["engine_net_pnl_fees_only"] = engine_net
     raw["total_trades"] = full["trades"]
     raw["win_rate"] = full["win_rate"]
@@ -410,14 +424,22 @@ def run() -> None:
     raw["period_start"] = A._iso(window_start_ts)
     raw["period_end"] = A._iso(window_end_ts)
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    (OUTPUT_DIR / "backtest_report.json").write_text(json.dumps(_sanitize(raw), default=str), encoding="utf-8")
     csv_lines = ["timestamp,value,nav"]
     for point in curve:
         csv_lines.append(f"{point.get('timestamp', '')},{point.get('value', '')},{point.get('nav', '')}")
-    (OUTPUT_DIR / "equity_curve.csv").write_text("\n".join(csv_lines) + "\n", encoding="utf-8")
-    (OUTPUT_DIR / "backtest_summary.json").write_text(json.dumps(analytics_block, default=str), encoding="utf-8")
-    (OUTPUT_DIR / "trades.json").write_text(json.dumps(_sanitize(trades[:5000]), default=str), encoding="utf-8")
+    files = {
+        "backtest_report.json": json.dumps(_sanitize(raw), default=str),
+        "equity_curve.csv": "\n".join(csv_lines) + "\n",
+        "backtest_summary.json": json.dumps(analytics_block, default=str),
+        "trades.json": json.dumps(_sanitize(trades[:5000]), default=str),
+    }
+    for out_dir in _output_dirs():
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            for name, text in files.items():
+                (out_dir / name).write_text(text, encoding="utf-8")
+        except OSError:
+            continue
 
     metrics = _sanitize(
         {
@@ -436,7 +458,11 @@ def run() -> None:
             "cost_sensitivity_decision": costs["decision"],
             "walk_forward_oos_trades": wf["oos_aggregate"]["trades"],
             "walk_forward_oos_expectancy_r": wf["oos_aggregate"]["expectancy_r"],
-            "account_total_return_pct": result.total_return_pct,
+            "account_total_return_pct": net_pnl / starting_balance * 100.0,
+            "account_max_drawdown_pct": float(full["max_drawdown_usdt"]) / starting_balance * 100.0,
+            "max_drawdown_usdt": full["max_drawdown_usdt"],
+            "engine_total_return_pct": result.total_return_pct,
+            "engine_max_drawdown_pct": result.max_drawdown_pct,
             "engine_net_pnl_fees_only": engine_net,
             "rows": int(sum(len(f) for f in replay.values())),
             "symbols_loaded": len(replay),
