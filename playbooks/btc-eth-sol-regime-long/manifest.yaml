@@ -1,0 +1,110 @@
+name: btc-eth-sol-regime-long
+display_name: "BTC/ETH/SOL Regime-Filtered Trend Long"
+version: "1.0.0"
+display_name_i18n:
+  en: "BTC/ETH/SOL Regime-Filtered Trend Long"
+  zh: "BTC/ETH/SOL 趋势状态过滤做多"
+  zh-tw: "BTC/ETH/SOL 趨勢狀態過濾做多"
+  es: "BTC/ETH/SOL Tendencia Larga con Filtro de Régimen"
+  ja: "BTC/ETH/SOL レジーム・フィルター付きトレンド・ロング"
+  vi: "BTC/ETH/SOL Xu hướng Long có Bộ lọc Trạng thái"
+description: "Long-only EMA-ADX trend breakout on BTC, ETH and SOL USDT perpetuals with a regime filter, fixed-risk sizing and exchange-side stops"
+description_i18n:
+  en: "Long-only EMA-ADX trend breakout on BTC, ETH and SOL USDT perpetuals with a regime filter, fixed-risk sizing and exchange-side stops"
+  zh: "BTC、ETH、SOL USDT 永续合约的仅做多 EMA-ADX 趋势突破策略，带市场状态过滤、固定风险仓位与交易所端止损"
+  zh-tw: "BTC、ETH、SOL USDT 永續合約的僅做多 EMA-ADX 趨勢突破策略，帶市場狀態過濾、固定風險倉位與交易所端止損"
+  es: "Ruptura de tendencia EMA-ADX solo en largo sobre perpetuos USDT de BTC, ETH y SOL con filtro de régimen, riesgo fijo y stops en el exchange"
+  ja: "BTC・ETH・SOLのUSDT無期限先物でロングのみのEMA-ADXトレンドブレイクアウト。レジーム・フィルター、固定リスク・サイズ、取引所側ストップ付き"
+  vi: "Chiến lược phá vỡ xu hướng EMA-ADX chỉ Long trên hợp đồng vĩnh cửu USDT BTC, ETH, SOL với bộ lọc trạng thái, khối lượng rủi ro cố định và dừng lỗ phía sàn"
+long_description: |
+  This Playbook is a long-only trend-following strategy for the three most
+  liquid USDT perpetual markets: bitcoin, ether and solana. Its thesis is that
+  a breakout carries follow-through only when the market is already in a
+  directional, orderly regime, so it aims to capture short continuation legs
+  inside established uptrends and deliberately stays flat when trend strength
+  is weak, when volatility is unusually quiet, or when volatility is extreme.
+  It is designed to be judged on net results after fees and funding, not on
+  displayed return.
+
+  The strategy enters long only after an hourly candle closes above its
+  recent range while the faster moving average sits above the slower one,
+  directional pressure favours buyers, the trend-strength reading confirms a
+  trending regime, and trading activity on that candle is clearly above its
+  recent average. It then opens with a patient limit order at the breakout
+  price and withdraws the order if the market does not come back to fill it
+  within a few hours. It never opens a position close to a funding settlement
+  and skips the trade when funding is expensive for longs.
+
+  Every position carries an exchange-side protective stop sized from recent
+  volatility and a fixed take-profit target, both attached when the order is
+  placed so there is no unprotected gap after the fill. A position that has
+  not reached either level within a set holding period is closed at market,
+  because a breakout that stalls has lost its edge.
+
+  Subscribers can adjust one parameter, the margin budget, which is the
+  capital reserved for this Playbook and the denominator for return
+  percentage. Raising it does not enlarge the fixed loss taken on each trade;
+  it only adds room for concurrent positions. Leverage is capped and isolated
+  margin is used on every position.
+
+  The main risk is that this kind of breakout edge is thin: our own out of
+  sample validation was close to breakeven after realistic costs and failed
+  the stricter double-cost test, so the Playbook can lose money. It
+  underperforms in choppy, range-bound markets, during gap moves around major
+  news, and when fees are higher than assumed. Built-in pauses stop new
+  entries after a bad day or a run of losses, but drawdowns can still be
+  significant. Past backtest results are not a guarantee of future returns.
+market_type: contract
+trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+tags: ["trend", "breakout", "ema", "adx", "regime-filter", "long-only", "contract", "btc", "eth", "sol"]
+schedule:
+  cron: "2,17,32,47 * * * *"
+  tz: "UTC"
+
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+
+strategy_config:
+  trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+  margin_budget: "1500"
+  base_strategy: ema_adx_trend
+  ema_fast: 20
+  ema_slow: 50
+  adx_period: 14
+  atr_period: 14
+  adx_trend_min: 30.0
+  adx_range_max: 20.0
+  atr_rank_window: 720
+  atr_rank_min: 20.0
+  atr_rank_max: 90.0
+  volume_avg_period: 20
+  volume_mult: 1.5
+  breakout_lookback: 20
+  risk_per_trade_usdt: 15.0
+  max_leverage: 5
+  max_concurrent: 3
+  stop_atr_mult: 1.5
+  tp_r_multiple: 2.0
+  time_stop_hours: 8
+  entry_ttl_hours: 4
+  daily_pause_usdt: 30.0
+  daily_stop_usdt: 40.0
+  max_consecutive_losses: 5
+  funding_block_minutes: 15
+  funding_max_against_8h: 0.0003
+  funding_interval_hours:
+    BTCUSDT: 8
+    ETHUSDT: 8
+    SOLUSDT: 8
+  stale_data_seconds: 60
+  allow_short: false
+
+user_config_schema:
+  margin_budget:
+    type: string
+    default: "1500"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Margin budget USDT"

@@ -3,8 +3,6 @@
 Pure pandas/numpy. Every value at bar ``t`` uses only bars ``<= t`` (closed bars),
 so the same function is safe for replay and for live decisions.
 """
-from __future__ import annotations
-
 from typing import Any, Mapping
 
 import numpy as np
@@ -163,6 +161,70 @@ def compute_signals(df: pd.DataFrame, cfg: Mapping[str, Any]) -> pd.DataFrame:
         raise ValueError(f"unknown base_strategy={base!r}")
     out["signal_long"] = long_sig.fillna(False).astype(bool)
     out["signal_short"] = short_sig.fillna(False).astype(bool)
+    return out
+
+
+REPLAY_FIELDS = (
+    "atr",
+    "adx",
+    "regime_code",
+    "signal_long",
+    "signal_short",
+    "funding_rate_8h",
+    "funding_settle_rate",
+    "funding_known",
+)
+
+_REGIME_CODES = {REGIME_SIT_OUT: 0.0, REGIME_TREND: 1.0, REGIME_RANGE: 2.0}
+
+
+def attach_replay_columns(
+    sig: pd.DataFrame,
+    funding: pd.Series | None,
+    funding_interval_hours: float = 8.0,
+    max_funding_age_hours: float = 24.0,
+) -> pd.DataFrame:
+    """Add numeric replay columns to a ``compute_signals`` frame indexed by bar OPEN time (UTC).
+
+    ``funding`` is a time-indexed series of funding rates (settlement or latest-known values).
+    funding_rate_8h: latest rate known at the bar close, scaled to an 8h equivalent.
+    funding_settle_rate: rate applied when the bar opens on a 00/08/16 UTC settlement, else 0.
+    funding_known: 1 when a rate no older than ``max_funding_age_hours`` exists at the bar close.
+    """
+    out = sig.copy()
+    out["regime_code"] = out["regime"].map(_REGIME_CODES).astype(float)
+    out["signal_long"] = out["signal_long"].astype(float)
+    out["signal_short"] = out["signal_short"].astype(float)
+    out["funding_rate_8h"] = 0.0
+    out["funding_settle_rate"] = 0.0
+    out["funding_known"] = 0.0
+    if funding is None or len(funding) == 0:
+        return out
+    fs = funding.dropna().sort_index()
+    fs = fs[~fs.index.duplicated(keep="last")]
+    scale = 8.0 / float(funding_interval_hours)
+    idx = out.index
+    close_times = idx + pd.Timedelta(hours=1)
+    pos_close = fs.index.searchsorted(close_times, side="right") - 1
+    pos_open = fs.index.searchsorted(idx, side="right") - 1
+    vals = fs.to_numpy(dtype=float)
+    f_idx = fs.index
+    max_age = pd.Timedelta(hours=max_funding_age_hours)
+    rate_8h = np.zeros(len(idx))
+    known = np.zeros(len(idx))
+    settle = np.zeros(len(idx))
+    for i in range(len(idx)):
+        k = pos_close[i]
+        if k >= 0 and close_times[i] - f_idx[k] <= max_age:
+            rate_8h[i] = vals[k] * scale
+            known[i] = 1.0
+        if idx[i].hour in FUNDING_HOURS_UTC and idx[i].minute == 0:
+            j = pos_open[i]
+            if j >= 0 and idx[i] - f_idx[j] <= pd.Timedelta(hours=funding_interval_hours):
+                settle[i] = vals[j]
+    out["funding_rate_8h"] = rate_8h
+    out["funding_known"] = known
+    out["funding_settle_rate"] = settle
     return out
 
 

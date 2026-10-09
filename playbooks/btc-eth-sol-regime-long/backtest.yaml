@@ -1,0 +1,74 @@
+venue:
+  name: BITGET
+  account_type: MARGIN
+  oms_type: NETTING
+  starting_balances:
+    - amount: 100000
+      currency: USDT
+
+strategy:
+  module: strategy
+  class: RegimeLongStrategy
+  config_class: RegimeLongConfig
+  config:
+    order_id_tag: "001"
+    slippage_ticks: 1.0
+
+execution:
+  start: "2024-10-01T00:00:00Z"
+  end: "2026-10-01T00:00:00Z"
+
+instruments:
+  - id: BTCUSDT.BITGET
+    kind: perpetual
+    raw_symbol: BTCUSDT
+    base_currency: BTC
+    quote_currency: USDT
+    settlement_currency: USDT
+    price_precision: 1
+    size_precision: 4
+    price_increment: "0.1"
+    size_increment: "0.0001"
+    lot_size: "0.0001"
+    maker_fee: "0.0002"
+    taker_fee: "0.0006"
+    bar_type: BTCUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+  - id: ETHUSDT.BITGET
+    kind: perpetual
+    raw_symbol: ETHUSDT
+    base_currency: ETH
+    quote_currency: USDT
+    settlement_currency: USDT
+    price_precision: 2
+    size_precision: 2
+    price_increment: "0.01"
+    size_increment: "0.01"
+    lot_size: "0.01"
+    maker_fee: "0.0002"
+    taker_fee: "0.0006"
+    bar_type: ETHUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+  - id: SOLUSDT.BITGET
+    kind: perpetual
+    raw_symbol: SOLUSDT
+    base_currency: SOL
+    quote_currency: USDT
+    settlement_currency: USDT
+    price_precision: 3
+    size_precision: 1
+    price_increment: "0.001"
+    size_increment: "0.1"
+    lot_size: "0.1"
+    maker_fee: "0.0002"
+    taker_fee: "0.0006"
+    bar_type: SOLUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+
+data_requirements:
+  required_bar_fields:
+    - atr
+    - adx
+    - regime_code
+    - signal_long
+    - signal_short
+    - funding_rate_8h
+    - funding_settle_rate
+    - funding_known
