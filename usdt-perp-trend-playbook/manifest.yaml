@@ -1,0 +1,86 @@
+name: usdt-perp-trend-playbook
+display_name: "USDT Perpetuals Trend Strategy"
+display_name_i18n:
+  en: "USDT Perpetuals Trend Strategy"
+  zh: "USDT合约趋势跟踪策略"
+  zh-tw: "USDT合約趨勢追蹤策略"
+  es: "Estrategia tendencial de perpetuos USDT"
+  ja: "USDTパーペチュアル・トレンドフォロー戦略"
+  vi: "Chiến lược xu hướng hợp đồng USDT"
+version: "1.0.0"
+description: "Trend-following USDT perpetuals strategy with regime filter and disciplined risk control"
+description_i18n:
+  en: "Trend-following USDT perpetuals strategy with regime filter and disciplined risk control"
+  zh: "具备市场环境过滤与严格风控的USDT合约趋势跟踪策略"
+  zh-tw: "具備市場環境過濾與嚴格風控的USDT合約趨勢追蹤策略"
+  es: "Estrategia tendencial para perpetuos USDT con filtro de régimen y control de riesgo estricto"
+  ja: "レジームフィルターと厳格なリスク管理を備えたUSDTパーペチュアル・トレンドフォロー戦略"
+  vi: "Chiến lược xu hướng hợp đồng USDT với bộ lọc trạng thái thị trường và quản lý rủi ro chặt chẽ"
+long_description: |
+  This Playbook is a trend-following system engineered for liquid USDT perpetual futures that seeks to capture clean directional expansions. The core thesis posits that persistent momentum following volatility compression yields favorable asymmetry when market regimes transition into trending states. Sideways consolidations and turbulent transition zones are deliberately ignored to minimize churn, concentrating capital strictly when market conviction and directional participation expand simultaneously.
+
+  Entry logic requires multi-layered structural alignment before opening any position. The system evaluates whether the broader directional regime is active, confirms that short-term momentum leads intermediate trajectory upward, and verifies that trading volume expands relative to recent baseline participation. When all criteria align and funding friction remains favorable, the Playbook initiates a long position using a resting limit order. Signals that do not meet strict validation criteria automatically trigger a no-trade stance rather than assuming market direction.
+
+  Risk management operates through pre-calculated defensive structures. Every position attaches an exchange-side stop loss derived from recent price dispersion immediately upon entry to eliminate unhedged post-fill gaps. The exit framework features a multi-tiered take profit structure designed to lock in partial gains while trailing the remainder behind market structure, complemented by an elapsed duration stop that closes stagnant exposure. Daily loss boundaries and consecutive adverse outcome limits proactively suspend activity during hostile market environments.
+
+  Subscribers can adjust operational parameters including the symbol universe, margin budget, and baseline leverage. Increasing leverage scales positional exposure and risk proportionally, requiring adequate account buffer to absorb normal equity fluctuations. Raising the margin budget increases order sizing while serving as the benchmark denominator for performance attribution. Narrowing the symbol scope concentrates allocation on specific assets, whereas expanding it diversifies opportunities across liquid pairs.
+
+  The Playbook underperforms during choppy range-bound conditions, volatile whipsaw transitions, and liquidity vacuums where sudden trend reversals trigger consecutive defensive exits. Periods of unfavorable funding rates or prolonged market compression can also lead to drawdown or extended inactivity. Historical performance does not guarantee future live profitability, and live execution remains subject to exchange execution latency, slippage, and trading fee drag.
+
+market_type: contract
+trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+tags: ["trend", "perpetuals", "contract", "usdt-m", "risk-controlled"]
+
+output_kind: trade_strategy
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+
+schedule:
+  cron: "0 * * * *"
+  tz: "UTC"
+
+strategy_config:
+  trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+  margin_budget: "100"
+  leverage: 5
+  risk_per_trade_usdt: "15"
+  max_concurrent_positions: 3
+  daily_loss_pause_usdt: "30"
+  hard_stop_loss_usdt: "40"
+  consecutive_losses_halt: 5
+
+user_config_schema:
+  trading_symbols:
+    type: array
+    item_type: string
+    default: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    options: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    aliases:
+      btc: BTCUSDT
+      eth: ETHUSDT
+      sol: SOLUSDT
+    min_items: 1
+    max_items: 3
+    label: "Tradable Perpetual Symbols"
+  margin_budget:
+    type: string
+    default: "100"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Margin budget USDT"
+  leverage:
+    type: integer
+    default: 5
+    min: 1
+    max: 5
+    aliases:
+      3x: 3
+      5x: 5
+    label: "Leverage (Max 5x)"
+  risk_per_trade_usdt:
+    type: string
+    default: "15"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Fixed Risk Per Trade USDT"
