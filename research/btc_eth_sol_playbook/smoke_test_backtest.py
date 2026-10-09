@@ -88,7 +88,7 @@ def _run(ohlcv_data, spec):
         frame = ohlcv_data[ins["id"]].loc[start:end]
         engine.add_data(BarDataWrangler(BarType.from_str(ins["bar_type"]), inst).process(
             frame[["open", "high", "low", "close", "volume"]]))
-    cfg = RegimeLongConfig.parse(json.dumps(spec["strategy"]["config"]))
+    cfg = RegimeLongConfig(**spec["strategy"]["config"])
     strat = RegimeLongStrategy(cfg)
     strat.set_feature_frames(ohlcv_data)
     engine.add_strategy(strat)
