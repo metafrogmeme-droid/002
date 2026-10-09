@@ -1,0 +1,142 @@
+name: humanoid-usdtm-ema-adx-trend
+display_name: "HUMANOID USDT-M EMA-ADX Trend"
+display_name_i18n:
+  en: "HUMANOID USDT-M EMA-ADX Trend"
+  zh: "HUMANOID USDT-M EMA-ADX 趋势策略"
+  zh-tw: "HUMANOID USDT-M EMA-ADX 趨勢策略"
+  es: "HUMANOID tendencia EMA-ADX USDT-M"
+  ja: "HUMANOID USDT-M EMA-ADX トレンド"
+  vi: "HUMANOID xu hướng EMA-ADX USDT-M"
+version: "0.1.0"
+description: "Long-only USDT-M trend Playbook on BTC, ETH, and SOL perps with a regime filter and isolated-subaccount risk caps"
+description_i18n:
+  en: "Long-only USDT-M trend Playbook on BTC, ETH, and SOL perps with a regime filter and isolated-subaccount risk caps"
+  zh: "仅做多的 USDT-M 趋势策略，覆盖 BTC/ETH/SOL 永续，带状态过滤与逐仓子账户风险上限"
+  zh-tw: "僅做多的 USDT-M 趨勢策略，覆蓋 BTC/ETH/SOL 永續，帶狀態過濾與逐倉子帳戶風險上限"
+  es: "Playbook alcista USDT-M en perps BTC, ETH y SOL con filtro de régimen y límites de riesgo en subcuenta aislada"
+  ja: "BTC/ETH/SOL無期限のロング専用USDT-Mトレンド。レジームフィルターと分離サブアカウントのリスク上限付き"
+  vi: "Playbook xu hướng USDT-M chỉ long trên perp BTC, ETH, SOL với lọc chế độ và trần rủi ro tiểu khoản isolated"
+long_description: |
+  This Playbook is a long-only trend-following strategy on liquid USDT-margined
+  perpetual futures. It is built on the assumption that when a market is already
+  stretching in a directional way and volatility is neither dead nor chaotic,
+  price tends to travel with that direction long enough to pay a defined risk
+  unit. The aim is verifiable net expectancy after fees, funding, and slippage,
+  not a decorative headline return. It is intended to run in an isolated
+  sub-account so foreign inventory cannot be mistaken for strategy risk.
+
+  Entry waits for a bullish moving-average stack, a momentum-strength reading
+  that has just crossed from quiet into a trending regime, and a volume
+  confirmation that the move is being participated in rather than printed on a
+  thin bar. If any of those reads is missing, the Playbook stays flat. An
+  optional live model layer may only veto a ready long; if that layer returns
+  invalid or no signal, the Playbook does not invent a direction and does not
+  trade. Limit entries are used so the stop can be attached on the same order.
+  Shorts stay disabled until a separate short-side test exists.
+
+  Exits are mechanical. A hard stop sits a volatility multiple below entry and
+  is sent with the entry order so there is no post-fill gap on the protective
+  side. The first slice of a winner is harvested at a fixed multiple of the
+  initial risk, and the remainder is trailed by a volatility stop so trends can
+  pay more than a static target. A time stop closes leftover inventory if the
+  thesis has not worked within the holding window. The Playbook also stands
+  aside around funding settlement and refuses a long when the next funding print
+  would charge the position too aggressively.
+
+  Subscribers can adjust the tradable symbol list, leverage, and margin budget.
+  Raising leverage amplifies both gains and losses equally and never makes the
+  rules more selective; the package still enforces a hard leverage cap. The
+  margin budget is the platform return denominator and the capital envelope used
+  when sizing isolated contracts. Changing symbols only rotates among the
+  declared majors; it does not add a new playbook.
+
+  The strategy underperforms in choppy ranges, around news gaps, and whenever
+  several stops cluster into a consecutive-loss halt. Drawdown can reach the
+  daily pause or the playbook stop even when the long-run idea is sound. Live
+  fills, fees, and funding will differ from any historical replay. Do not treat
+  past metrics as a promise until the published gates actually pass.
+
+market_type: contract
+trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+tags: ["trend", "ema", "adx", "usdt-m", "btc", "eth", "sol", "long-only"]
+output_kind: trade_strategy
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+
+schedule:
+  cron: "10 * * * *"
+  tz: "UTC"
+
+strategy_config:
+  trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+  leverage: 5
+  margin_budget: "600"
+  isolated_margin: true
+  long_only: true
+  shorts_enabled: false
+  entry_timeframe: "1h"
+  fast_period: 12
+  slow_period: 26
+  adx_period: 14
+  adx_min: 25
+  atr_period: 14
+  atr_percentile_lookback: 500
+  atr_pct_lo: 20
+  atr_pct_hi: 90
+  volume_avg_period: 20
+  volume_mult: 1.5
+  volume_confirm_bars: 4
+  risk_usdt: 15
+  stop_atr_mult: 1.5
+  first_tp_r: 1.5
+  first_tp_fraction: 0.5
+  trail_atr_mult: 1.0
+  time_stop_hours: 8
+  limit_ttl_hours: 4
+  funding_skip_rate: 0.0003
+  funding_blackout_minutes: 15
+  max_concurrent: 3
+  max_per_symbol: 1
+  daily_pause_usdt: -30
+  playbook_stop_usdt: -40
+  max_consecutive_losses: 5
+  stale_quote_ms: 60000
+  maker_fee: 0.0002
+  taker_fee: 0.0006
+  slippage_ticks: 1
+  fee_tier: "PENDING"
+  activation_status: "inactive"
+
+user_config_schema:
+  trading_symbols:
+    type: array
+    item_type: string
+    default: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    options: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    aliases:
+      btc: BTCUSDT
+      bitcoin: BTCUSDT
+      eth: ETHUSDT
+      ethereum: ETHUSDT
+      sol: SOLUSDT
+      solana: SOLUSDT
+    min_items: 1
+    max_items: 3
+    label: "USDT-M symbols"
+  leverage:
+    type: integer
+    default: 5
+    min: 1
+    max: 5
+    aliases:
+      3x: 3
+      5x: 5
+    label: "Leverage (hard cap 5x)"
+  margin_budget:
+    type: string
+    default: "600"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Margin budget USDT"
