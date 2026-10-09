@@ -1,0 +1,130 @@
+name: crypto-majors-long-trend
+display_name: "BTCUSDT Isolated Long Trend"
+display_name_i18n:
+  en: "BTCUSDT Isolated Long Trend"
+  zh: "BTCUSDT 隔离保证金只做多趋势"
+  zh-tw: "BTCUSDT 隔離保證金只做多趨勢"
+  es: "Tendencia larga aislada BTCUSDT"
+  ja: "BTCUSDT 分離証拠金ロングトレンド"
+  vi: "Xu hướng long ký quỹ tách BTCUSDT"
+version: "1.0.0"
+description: "Long-only BTCUSDT perpetual pullback with isolated margin and fixed cash risk"
+description_i18n:
+  en: "Long-only BTCUSDT perpetual pullback with isolated margin and fixed cash risk"
+  zh: "BTCUSDT 永续只做多回踩策略，隔离保证金与固定现金风险"
+  zh-tw: "BTCUSDT 永續只做多回踩策略，隔離保證金與固定現金風險"
+  es: "Pullback largo solo en BTCUSDT perpetuo, margen aislado y riesgo fijo"
+  ja: "BTCUSDT無期限のロング限定押し目。分離証拠金と固定リスク"
+  vi: "Hồi pullback long-only BTCUSDT, ký quỹ tách và rủi ro cố định"
+long_description: |
+  This Playbook is a long-only trend-following strategy on Bitget USDT crypto-major
+  perpetual contracts. It is built on the assumption that once a major crypto
+  market commits to a sustained upside trend, pullbacks inside that trend are
+  more likely to resume than to fail. Staying flat when the tape is choppy or
+  the signal layer is invalid protects capital better than forcing trades. It
+  captures the middle of those upside legs with a small isolated cash risk per
+  attempt. It is designed for a single isolated sub-account.
+
+  The Playbook enters a long position only when an upside regime, an acceptable
+  volatility reading, and a pullback to the shorter-horizon average all line up
+  while price still holds above the longer-horizon average. If the regime or
+  signal layer is invalid or silent, it does not trade. Entries are resting
+  limit orders, and unfilled working orders are cancelled after a short waiting
+  window. Funding settlement windows and expected funding cost versus the
+  planned hold also block new entries.
+
+  Exits are mechanical. Every fill carries an attached stop based on recent
+  true range and a fixed multiple-of-risk take profit. If neither level is
+  reached before the trend time-stop, the position is closed. The Playbook
+  never adds to a loser, never shorts in this version, and never touches a
+  position it did not open. Daily realized loss pauses new entries, and a
+  deeper daily loss stops the Playbook until the operator resets it.
+
+  Subscribers can adjust the trading symbol among the supported crypto-major
+  perpetuals, the leverage used to hold the isolated position, and the margin
+  budget that caps notional size and serves as the platform return denominator.
+  Raising leverage does not make entries more selective; it only increases the
+  notional a given margin can support. Raising the margin budget allows larger
+  but still risk-capped size. Changing the symbol switches which major is
+  scanned.
+
+  The main risk is a trend that looks clean and then reverses through the stop,
+  especially around liquidation cascades or funding squeezes. The strategy
+  underperforms in range-bound markets that still print occasional trend-like
+  readings. Historical replay metrics are not a guarantee of live profitability,
+  and this Playbook can lose money when upside-trend persistence fails. Match
+  it against your own drawdown tolerance before subscribing, and run it only
+  on an isolated sub-account you can afford to halt.
+
+market_type: contract
+trading_symbols: ["BTCUSDT"]
+tags: ["trend", "btc", "contract", "long-only", "isolated"]
+output_kind: trade_strategy
+schedule:
+  cron: "*/15 * * * *"
+  tz: "UTC"
+
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+
+strategy_config:
+  trading_symbols: ["BTCUSDT"]
+  leverage: 5
+  margin_budget: "500"
+  risk_usdt: 15
+  leverage_cap: 5
+  adx_period: 14
+  atr_period: 14
+  ema_fast_period: 21
+  ema_slow_period: 55
+  adx_min: 22
+  atr_pct_lo: 25
+  atr_pct_hi: 80
+  percentile_lookback: 168
+  stop_atr_mult: 1.5
+  tp_r_multiple: 2.0
+  time_stop_hours: 8
+  limit_ttl_hours: 4
+  spread_max_bps: 5
+  volume_min_usdt: 50000000
+  funding_blackout_min: 15
+  funding_cost_max_r: 0.1
+  daily_pause_usdt: 30
+  playbook_stop_usdt: 40
+  consecutive_loss_halt: 5
+  stale_data_sec: 60
+  maker_fee: 0.0002
+  taker_fee: 0.0006
+
+user_config_schema:
+  trading_symbols:
+    type: array
+    item_type: string
+    default: ["BTCUSDT"]
+    options: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    aliases:
+      btc: BTCUSDT
+      bitcoin: BTCUSDT
+      eth: ETHUSDT
+      ethereum: ETHUSDT
+      sol: SOLUSDT
+    min_items: 1
+    max_items: 1
+    label: "Trading symbol"
+  leverage:
+    type: integer
+    default: 5
+    min: 1
+    max: 5
+    aliases:
+      3x: 3
+      5x: 5
+    label: "Leverage"
+  margin_budget:
+    type: string
+    default: "500"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Margin budget USDT"

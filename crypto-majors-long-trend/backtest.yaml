@@ -1,0 +1,62 @@
+venue:
+  name: BITGET
+  account_type: MARGIN
+  oms_type: NETTING
+  starting_balances:
+    - amount: 100000
+      currency: USDT
+
+strategy:
+  module: strategy
+  class: CryptoMajorsLongTrend
+  config_class: CryptoMajorsLongTrendConfig
+  config:
+    order_id_tag: "cmlt-001"
+    trade_size: "0.0001"
+    symbol: BTCUSDT
+    adx_period: 14
+    atr_period: 14
+    ema_fast_period: 21
+    ema_slow_period: 55
+    adx_min: 22.0
+    atr_pct_lo: 25.0
+    atr_pct_hi: 80.0
+    percentile_lookback: 168
+    stop_atr_mult: 1.5
+    tp_r_multiple: 2.0
+    time_stop_hours: 8
+    limit_ttl_hours: 4
+    risk_usdt: 15.0
+    leverage_cap: 5
+    margin_budget: 500.0
+    funding_blackout_min: 15
+    funding_cost_max_r: 0.1
+    daily_pause_usdt: 30.0
+    playbook_stop_usdt: 40.0
+    consecutive_loss_halt: 5
+    maker_fee: 0.0002
+    taker_fee: 0.0006
+
+execution:
+  start: "2024-10-09T00:00:00Z"
+  end: "2026-10-09T00:00:00Z"
+
+instrument:
+  id: BTCUSDT.BITGET
+  kind: perpetual
+  raw_symbol: BTCUSDT
+  base_currency: BTC
+  quote_currency: USDT
+  settlement_currency: USDT
+  price_precision: 1
+  size_precision: 4
+  price_increment: "0.1"
+  size_increment: "0.0001"
+  lot_size: "0.0001"
+  maker_fee: "0.0002"
+  taker_fee: "0.0006"
+  bar_type: BTCUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+
+data_requirements:
+  required_bar_fields:
+    - funding_rate
