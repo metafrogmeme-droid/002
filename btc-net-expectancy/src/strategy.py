@@ -3,7 +3,7 @@ from typing import Optional
 
 from nautilus_trader.config import StrategyConfig
 from nautilus_trader.model.data import Bar, BarType
-from nautilus_trader.model.enums import OrderSide, TimeInForce
+from nautilus_trader.model.enums import OrderSide, OrderType, TimeInForce
 from nautilus_trader.model.identifiers import InstrumentId
 from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.model.objects import Price, Quantity
@@ -26,8 +26,8 @@ class BtcNetExpectancyConfig(StrategyConfig):
     atr_percentile_lookback: int = 168
     atr_percentile_min: str = "30"
     atr_percentile_max: str = "75"
-    breakout_atr_buffer: str = "0.25"
-    close_location_min: str = "0.75"
+    breakout_atr_buffer: str = "0"
+    close_location_min: str = "0"
     take_profit_r: str = "2"
     time_stop_hours: int = 8
     order_ttl_hours: int = 4
@@ -47,6 +47,7 @@ class BtcNetExpectancyStrategy(Strategy):
         self._trs: list[float] = []
         self._atr_history: list[float] = []
         self._pending_entry = False
+        self._position_active = False
         self._pending_bars = 0
         self._entry_price = 0.0
         self._stop_price = 0.0
@@ -93,15 +94,17 @@ class BtcNetExpectancyStrategy(Strategy):
         has_position = bool(positions)
         if self._pending_entry and has_position:
             self._pending_entry = False
+            self._position_active = True
             self._entry_bar = len(self._closes) - 1
+
+        if self._position_active and not has_position:
+            self.cancel_all_orders(instrument.id)
+            self._position_active = False
+            return
 
         if has_position:
             elapsed = len(self._closes) - 1 - self._entry_bar
-            if low <= self._stop_price:
-                self._close_long(instrument)
-            elif high >= self._target_price:
-                self._close_long(instrument)
-            elif elapsed >= self.cfg.time_stop_hours:
+            if elapsed >= self.cfg.time_stop_hours:
                 self._close_long(instrument)
             return
 
@@ -161,9 +164,27 @@ class BtcNetExpectancyStrategy(Strategy):
         tick = float(instrument.price_increment)
         entry = close - tick
         stop_distance = float(self.cfg.atr_stop_multiple) * atr
-        stop = entry - stop_distance - tick
-        target = entry + float(self.cfg.take_profit_r) * stop_distance - tick
-        raw_qty = Decimal(self.cfg.risk_usdt) / Decimal(str(stop_distance))
+        tick_decimal = Decimal(str(tick))
+        stop = float(
+            (
+                Decimal(str(entry - stop_distance)) / tick_decimal
+            ).to_integral_value(rounding=ROUND_DOWN)
+            * tick_decimal
+        )
+        actual_stop_distance = entry - stop
+        target = float(
+            (
+                Decimal(
+                    str(
+                        entry
+                        + float(self.cfg.take_profit_r) * actual_stop_distance
+                    )
+                )
+                / tick_decimal
+            ).to_integral_value(rounding=ROUND_DOWN)
+            * tick_decimal
+        )
+        raw_qty = Decimal(self.cfg.risk_usdt) / Decimal(str(actual_stop_distance))
         step = Decimal(str(instrument.size_increment))
         qty_decimal = (raw_qty / step).to_integral_value(rounding=ROUND_DOWN) * step
         if qty_decimal <= 0:
@@ -171,14 +192,19 @@ class BtcNetExpectancyStrategy(Strategy):
 
         qty = Quantity(qty_decimal, instrument.size_precision)
         price = Price(Decimal(str(entry)), instrument.price_precision)
-        order = self.order_factory.limit(
+        order_list = self.order_factory.bracket(
             instrument_id=instrument.id,
             order_side=OrderSide.BUY,
             quantity=qty,
-            price=price,
+            entry_order_type=OrderType.LIMIT,
+            entry_price=price,
+            tp_price=Price(Decimal(str(target)), instrument.price_precision),
+            sl_trigger_price=Price(Decimal(str(stop)), instrument.price_precision),
             time_in_force=TimeInForce.GTC,
+            entry_post_only=True,
+            tp_post_only=False,
         )
-        self.submit_order(order)
+        self.submit_order_list(order_list)
         self._pending_entry = True
         self._pending_bars = 0
         self._entry_price = entry
@@ -186,6 +212,7 @@ class BtcNetExpectancyStrategy(Strategy):
         self._target_price = target
 
     def _close_long(self, instrument: Instrument) -> None:
+        self.cancel_all_orders(instrument.id)
         for position in self.cache.positions_open(instrument_id=instrument.id):
             order = self.order_factory.market(
                 instrument_id=instrument.id,

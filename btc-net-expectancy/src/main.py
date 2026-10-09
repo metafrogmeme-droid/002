@@ -697,7 +697,10 @@ def _run_live() -> None:
     entry = ((bid - tick) / tick).to_integral_value(rounding=ROUND_DOWN) * tick
     stop_distance = Decimal(str(cfg["atr_stop_multiple"])) * atr
     stop = ((entry - stop_distance) / tick).to_integral_value(rounding=ROUND_DOWN) * tick
-    target = ((entry + Decimal(str(cfg["take_profit_r"])) * stop_distance) / tick).to_integral_value(rounding=ROUND_DOWN) * tick
+    actual_stop_distance = entry - stop
+    target = (
+        (entry + Decimal(str(cfg["take_profit_r"])) * actual_stop_distance) / tick
+    ).to_integral_value(rounding=ROUND_DOWN) * tick
     risk = Decimal(str(cfg["risk_usdt"]))
     desired_qty = risk / (entry - stop)
     desired_notional = desired_qty * entry
