@@ -25,6 +25,7 @@ from .features import (
     compute_indicators,
     compute_signals,
     funding_blocks,
+    funding_unit_scale,
     in_funding_window,
     validate_signal,
 )
@@ -178,11 +179,12 @@ def _funding_8h(symbol: str, interval_hours: float) -> Optional[float]:
     rows = data.to_records(data.crypto.futures.funding_rate(symbol=symbol, exchange="bitget", interval="1h", days=1))
     if not rows:
         return None
+    scale, _unit = funding_unit_scale([_f(r.get("funding_rate")) for r in rows])
     last = rows[-1]
     rate = _f(last.get("estimated_rate"))
     if rate is None:
         rate = _f(last.get("funding_rate"))
-    return None if rate is None else rate * 8.0 / interval_hours
+    return None if rate is None else rate * scale * 8.0 / interval_hours
 
 
 # ---------------------------------------------------------------- trade callbacks (run only via emit_signal_or_follow)
@@ -291,19 +293,22 @@ def _estimate_funding(symbol: str, qty: float, price: float, start_ms: int, end_
                                                                 start_time=start_ms, end_time=end_ms))
     except Exception:
         return None
-    total = 0.0
-    seen: set[int] = set()
+    scale, _unit = funding_unit_scale([_f(r.get("funding_rate")) for r in rows])
+    # Hourly rows carry the rate for the upcoming settlement (``funding_timestamp``);
+    # the last row before a settlement is the rate charged at it.
+    by_settle: dict[int, tuple[int, float]] = {}
     for r in rows:
-        ts = _ms_field(r, "timestamp", "date")
+        ts = _ms_field(r, "time", "timestamp", "date")
         rate = _f(r.get("funding_rate"))
+        settle = _ms_field(r, "funding_timestamp")
         if ts is None or rate is None:
             continue
-        settle = (ts // HOUR_MS) * HOUR_MS
-        hour = (settle // HOUR_MS) % 24
-        if hour in (0, 8, 16) and start_ms < settle <= end_ms and settle not in seen:
-            seen.add(settle)
-            total += (1.0 if side == "long" else -1.0) * qty * price * rate
-    return total
+        if settle is None:
+            settle = (ts // HOUR_MS) * HOUR_MS
+        if start_ms < settle <= end_ms and (settle not in by_settle or ts >= by_settle[settle][0]):
+            by_settle[settle] = (ts, rate * scale)
+    sgn = 1.0 if side == "long" else -1.0
+    return sum(sgn * qty * price * rate for _ts, rate in by_settle.values())
 
 
 def _resolve_close(symbol: str, pos: dict[str, Any], cfg: dict[str, Any]) -> Optional[dict[str, Any]]:

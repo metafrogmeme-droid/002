@@ -207,6 +207,25 @@ def last_signal_row(bars: pd.DataFrame, cfg: Mapping[str, Any]) -> dict[str, flo
     }
 
 
+FUNDING_PERCENT_MEDIAN_MIN = 0.001
+
+
+def funding_unit_scale(rates: Any) -> tuple[float, str]:
+    """Multiplier that converts a series of SDK funding rates to decimals, plus the detected unit.
+
+    ``getagent.data.crypto.futures.funding_rate`` returned percent values for Bitget
+    (BTC 0.01 == 0.01% per 8h) in a sandbox run on 2026-10-09, although its docs say
+    decimal. Bitget 8h rates sit near 0.0001 as decimals and near 0.01 as percent, so
+    a median magnitude above 0.001 is read as percent. Decided per fetched series.
+    """
+    vals = sorted(abs(float(r)) for r in rates if r is not None and np.isfinite(float(r)))
+    if not vals:
+        return 1.0, "unknown"
+    if vals[len(vals) // 2] > FUNDING_PERCENT_MEDIAN_MIN:
+        return 0.01, "percent"
+    return 1.0, "decimal"
+
+
 class FundingLookup:
     """Point-in-time funding rates for one symbol (timestamps in ms, UTC).
 

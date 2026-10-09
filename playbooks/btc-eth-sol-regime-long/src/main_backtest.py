@@ -18,7 +18,7 @@ import pandas as pd
 
 from getagent import backtest, data, runtime
 
-from .features import FundingLookup, compute_indicators, compute_signals
+from .features import FundingLookup, compute_indicators, compute_signals, funding_unit_scale
 
 HOUR_MS = 3_600_000
 DAY_MS = 86_400_000
@@ -74,7 +74,8 @@ def _fetch_klines(symbol: str, start_ms: int, end_ms: int, deadline: datetime) -
     return df[["open", "high", "low", "close", "volume"]].astype(float)
 
 
-def _fetch_funding_from(exchange: str, symbol: str, start_ms: int, end_ms: int, deadline: datetime) -> pd.Series:
+def _fetch_funding_from(exchange: str, symbol: str, start_ms: int, end_ms: int,
+                        deadline: datetime) -> tuple[pd.Series, str]:
     records: list[dict[str, Any]] = []
     cursor = start_ms
     while cursor < end_ms:
@@ -91,29 +92,60 @@ def _fetch_funding_from(exchange: str, symbol: str, start_ms: int, end_ms: int, 
             pass
         cursor = stop
     if not records:
-        return pd.Series(dtype=float)
+        return pd.Series(dtype=float), "unknown"
     df = pd.DataFrame(records)
     if "funding_rate" not in df.columns:
-        return pd.Series(dtype=float)
+        return pd.Series(dtype=float), "unknown"
     idx = _time_index(df)
+    if "funding_timestamp" in df.columns:
+        # Rows are buckets carrying the rate for the upcoming settlement; keep the last
+        # value before each settlement, keyed by the settlement time.
+        settle = pd.to_numeric(df["funding_timestamp"], errors="coerce")
+        if settle.notna().all():
+            df = df.assign(_bucket=idx).sort_values("_bucket")
+            df = df.groupby(pd.to_numeric(df["funding_timestamp"]).astype("int64"), sort=True).tail(1)
+            idx = pd.DatetimeIndex(pd.to_datetime(pd.to_numeric(df["funding_timestamp"]).astype("int64"),
+                                                  unit="ms", utc=True))
     s = pd.Series(pd.to_numeric(df["funding_rate"], errors="coerce").to_numpy(), index=idx).dropna()
-    return s[~s.index.duplicated(keep="last")].sort_index()
+    s = s[s.index <= pd.Timestamp(end_ms, unit="ms", tz="UTC") + pd.Timedelta(hours=8)]
+    scale, unit = funding_unit_scale(s.tolist())
+    s = s * scale
+    return s[~s.index.duplicated(keep="last")].sort_index(), unit
 
 
 def _fetch_funding(symbol: str, start_ms: int, end_ms: int, deadline: datetime) -> tuple[pd.Series, dict[str, Any]]:
     """Bitget funding first; Binance only for the part Bitget does not cover (proxy, reported)."""
-    bitget = _fetch_funding_from("bitget", symbol, start_ms, end_ms, deadline)
-    info: dict[str, Any] = {"bitget_rows": int(len(bitget)), "binance_proxy_rows": 0}
+    bitget, unit = _fetch_funding_from("bitget", symbol, start_ms, end_ms, deadline)
+    info: dict[str, Any] = {"bitget_rows": int(len(bitget)), "bitget_sdk_unit": unit, "binance_proxy_rows": 0}
     first_bitget = int(bitget.index.min().timestamp() * 1000) if len(bitget) else end_ms
     if first_bitget > start_ms + 2 * DAY_MS:
         # Fallback reason: bitget funding history does not reach back to the replay start.
-        proxy = _fetch_funding_from("binance", symbol, start_ms, first_bitget, deadline)
+        proxy, proxy_unit = _fetch_funding_from("binance", symbol, start_ms, first_bitget, deadline)
+        proxy = proxy[proxy.index < pd.Timestamp(first_bitget, unit="ms", tz="UTC")]
         info["binance_proxy_rows"] = int(len(proxy))
+        info["binance_sdk_unit"] = proxy_unit
         if len(proxy):
             bitget = pd.concat([proxy[proxy.index < pd.Timestamp(first_bitget, unit="ms", tz="UTC")], bitget])
     info["first"] = bitget.index.min().isoformat() if len(bitget) else None
     info["last"] = bitget.index.max().isoformat() if len(bitget) else None
     return bitget.sort_index(), info
+
+
+def _funding_probe(symbol: str) -> dict[str, Any]:
+    """Raw funding samples, so the rate units the SDK returns can be checked against the docs."""
+    out: dict[str, Any] = {}
+    calls = {
+        "4h_recent": lambda: data.crypto.futures.funding_rate(symbol=symbol, exchange="bitget", interval="4h", days=3),
+        "1h_live_call": lambda: data.crypto.futures.funding_rate(symbol=symbol, exchange="bitget", interval="1h", days=1),
+        "ticker": lambda: data.crypto.futures.ticker(symbol=symbol, exchange="bitget"),
+    }
+    for name, call in calls.items():
+        try:
+            recs = data.to_records(call())
+            out[name] = {"rows": len(recs), "head": recs[:2], "tail": recs[-3:]}
+        except Exception as exc:
+            out[name] = {"error": f"{type(exc).__name__}: {exc}"[:300]}
+    return out
 
 
 def _metrics(trades: list[dict[str, Any]], start_ms: int, end_ms: int, budget: float, risk: float) -> dict[str, Any]:
@@ -283,5 +315,12 @@ def run() -> None:
             "adx_trend_min": cfg.get("adx_trend_min"),
             "unknown_funding_policy": strat_cfg.get("unknown_funding_policy", "block"),
             "signal_evaluations": ledger.get("signal_evaluations"),
+            "ledger_trades": m.get("total_trades"),
+            "ledger_win_rate": m.get("win_rate"),
+            "ledger_profit_factor": m.get("profit_factor"),
+            "ledger_net_pnl": m.get("net_pnl"),
+            "ledger_max_drawdown_usdt": m.get("max_drawdown_usdt"),
+            "ledger_sharpe": m.get("sharpe_ratio"),
+            "funding_probe": _funding_probe(symbols[0]),
         }),
     )
