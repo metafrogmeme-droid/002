@@ -399,15 +399,41 @@ def _walk_funding(
 
 
 def _bars_for_replay(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Kline rows indexed by `time`. Drop `timestamp` so the joiner can create it."""
+    """Kline rows indexed by `time`, restricted to OHLCV.
+
+    Extra fields are dropped so a later feature join cannot overwrite a price.
+    A bar that already violates low/high against open and close is omitted.
+    """
+    try:
+        from .risk import ohlc_is_valid
+    except ImportError:
+        from risk import ohlc_is_valid
+
     normalized: list[dict[str, Any]] = []
     for row in rows:
         stamp = _time_ms(row)
         if stamp is None:
             continue
-        copied = {key: value for key, value in row.items() if key != "timestamp"}
-        copied["time"] = stamp
-        normalized.append(copied)
+        try:
+            open_ = float(row.get("open"))
+            high = float(row.get("high"))
+            low = float(row.get("low"))
+            close = float(row.get("close"))
+            volume = float(row.get("volume") or 0)
+        except (TypeError, ValueError):
+            continue
+        if not ohlc_is_valid(open_, high, low, close) or volume < 0 or volume != volume:
+            continue
+        normalized.append(
+            {
+                "time": stamp,
+                "open": open_,
+                "high": high,
+                "low": low,
+                "close": close,
+                "volume": volume,
+            }
+        )
     return normalized
 
 
@@ -448,6 +474,10 @@ def build_replay_frame(symbol: str, start_ms: int, end_ms: int) -> tuple[Any, di
     )
     if "funding_rate" not in getattr(frame, "columns", []):
         raise DataCoverageError(f"{symbol}: replay frame is missing funding_rate")
+    replay_bars = _bars_for_replay(bars)
+    frame = _restore_kline_prices(frame, replay_bars)
+    if len(frame) == 0:
+        raise DataCoverageError(f"{symbol}: no valid OHLC bars remain after the funding join")
     frame = _restore_utc_index(frame)
     index_min = frame.index.min()
     index_max = frame.index.max()
@@ -477,6 +507,54 @@ def build_replay_frame(symbol: str, start_ms: int, end_ms: int) -> tuple[Any, di
         "index_last": index_max.isoformat(),
     }
     return frame, coverage
+
+
+def _restore_kline_prices(frame: Any, bars: list[dict[str, Any]]) -> Any:
+    """Put the exchange OHLC back onto the joined frame.
+
+    The funding join is allowed to add `funding_rate` only. If it replaces a
+    price column, the bar is not a market bar and must not be replayed.
+    """
+    prices: dict[int, dict[str, float]] = {}
+    for row in bars:
+        stamp = row.get("time")
+        if not isinstance(stamp, int):
+            continue
+        prices[stamp] = {
+            "open": float(row["open"]),
+            "high": float(row["high"]),
+            "low": float(row["low"]),
+            "close": float(row["close"]),
+            "volume": float(row["volume"]),
+        }
+    restored = frame.copy()
+    keep: list[bool] = []
+    for ts in restored.index:
+        stamp = _index_ms(ts)
+        row = prices.get(stamp)
+        keep.append(row is not None)
+        if row is None:
+            continue
+        for column, value in row.items():
+            restored.at[ts, column] = value
+    if keep and not all(keep):
+        restored = restored.loc[keep]
+    return restored
+
+
+def _index_ms(ts: Any) -> int | None:
+    try:
+        if isinstance(ts, (int, float)) and not isinstance(ts, bool):
+            stamp = int(ts)
+            if stamp < 10_000_000_000:
+                stamp *= 1000
+            return stamp
+        parsed = pd.Timestamp(ts)
+        if parsed.year < 2000:
+            return int(parsed.value / 1_000_000)
+        return int(parsed.timestamp() * 1000)
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 def _restore_utc_index(frame: Any) -> Any:

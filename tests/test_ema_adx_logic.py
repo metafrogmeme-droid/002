@@ -18,6 +18,7 @@ from report import activation_verdict  # noqa: E402
 from risk import (  # noqa: E402
     ClosedTrade,
     exposure_hits_blackout,
+    ohlc_is_valid,
     funding_page_ignores_window,
     funding_rate_from_managed,
     funding_series_gap_ms,
@@ -182,6 +183,10 @@ class RiskTests(unittest.TestCase):
         self.assertAlmostEqual(decimal_rate, 0.00004)
         self.assertLess(decimal_rate, 0.0003)
         self.assertGreater(0.004, 0.0003)
+
+    def test_bar_with_low_above_open_is_not_replayed(self):
+        self.assertTrue(ohlc_is_valid(100.0, 101.0, 99.0, 100.5))
+        self.assertFalse(ohlc_is_valid(100.0, 101.0, 100.1, 100.5))
 
     def test_funding_gap_is_reported_and_not_filled(self):
         day = 24 * 60 * 60 * 1000

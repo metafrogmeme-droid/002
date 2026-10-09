@@ -22,6 +22,15 @@ def funding_rate_from_managed(raw: float) -> float:
     return raw / MANAGED_FUNDING_PERCENT_SCALE
 
 
+def ohlc_is_valid(open_: float, high: float, low: float, close: float) -> bool:
+    """True when a bar can be replayed without inventing a price."""
+    values = (open_, high, low, close)
+    for value in values:
+        if value != value or value in (float("inf"), float("-inf")) or value <= 0:
+            return False
+    return low <= high and low <= open_ and low <= close and high >= open_ and high >= close
+
+
 def funding_series_gap_ms(stamps: Sequence[int], max_gap_ms: int) -> int | None:
     """Largest hole between stamps, or None when every step is inside the cap.
 
