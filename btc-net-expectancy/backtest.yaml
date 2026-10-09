@@ -17,7 +17,7 @@ strategy:
     atr_stop_multiple: "1.5"
     adx_period: 14
     adx_min: "15"
-    adx_max: "35"
+    adx_max: "100"
     rsi_period: 14
     rsi_recovery_level: "50"
     long_trend_period: 200
