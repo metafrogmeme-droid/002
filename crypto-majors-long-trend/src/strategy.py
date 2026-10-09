@@ -1,7 +1,9 @@
 """Nautilus long-only pullback replay for crypto-major USDT perps."""
 
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Optional
 
 from nautilus_trader.config import StrategyConfig
@@ -307,3 +309,9 @@ class CryptoMajorsLongTrend(Strategy):
         if self._instrument is not None:
             self.cancel_all_orders(self._instrument.id)
             self.close_all_positions(self._instrument.id)
+        try:
+            out = Path("/workspace/output/round_trips.json")
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(ROUND_TRIPS, default=str), encoding="utf-8")
+        except Exception:
+            pass

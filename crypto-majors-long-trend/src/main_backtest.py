@@ -201,6 +201,15 @@ def run() -> None:
     )
     chart_path = backtest.generate_chart(result)
     trips = list(strategy_mod.ROUND_TRIPS)
+    if not trips:
+        trip_path = OUT_DIR / "round_trips.json"
+        if trip_path.exists():
+            try:
+                payload = json.loads(trip_path.read_text(encoding="utf-8"))
+                if isinstance(payload, list):
+                    trips = payload
+            except (OSError, json.JSONDecodeError):
+                trips = []
     full = _trade_metrics(trips)
     is_trips = [item for item in trips if (_parse_time(item.get("time")) or WINDOW_START) < IS_END]
     oos_trips = [item for item in trips if (_parse_time(item.get("time")) or WINDOW_START) >= IS_END]
