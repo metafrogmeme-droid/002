@@ -47,5 +47,5 @@ instrument:
   bar_type: BTCUSDT.BITGET-1-HOUR-LAST-EXTERNAL
 
 execution:
-  start: "2022-10-09T00:00:00Z"
+  start: "2023-10-09T00:00:00Z"
   end: "2026-10-09T00:00:00Z"

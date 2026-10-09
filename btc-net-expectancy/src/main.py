@@ -112,9 +112,9 @@ def _records(value: Any) -> list[dict[str, Any]]:
     return [dict(row) for row in data.to_records(value)]
 
 
-def _fetch_four_year_frame() -> pd.DataFrame:
+def _fetch_three_year_frame() -> pd.DataFrame:
     end = datetime(2026, 10, 9, tzinfo=timezone.utc)
-    start = datetime(2022, 10, 9, tzinfo=timezone.utc)
+    start = datetime(2023, 10, 9, tzinfo=timezone.utc)
     cursor = start
     chunks: list[pd.DataFrame] = []
     while cursor < end:
@@ -141,7 +141,7 @@ def _fetch_four_year_frame() -> pd.DataFrame:
 
 def _fetch_historical_funding() -> dict[int, float]:
     end = datetime(2026, 10, 9, tzinfo=timezone.utc)
-    start = datetime(2022, 10, 9, tzinfo=timezone.utc)
+    start = datetime(2023, 10, 9, tzinfo=timezone.utc)
     settlements: dict[int, float] = {}
     response = data.crypto.futures.funding_rate(
         symbol=SYMBOL,
@@ -189,7 +189,7 @@ def _write_report(
         "first_bar": frame.index.min().isoformat(),
         "last_bar": frame.index.max().isoformat(),
         "walk_forward_split": {
-            "development": "2022-10-09/2024-10-08",
+            "development": "2023-10-09/2024-10-08",
             "validation": "2024-10-09/2026-10-08",
         },
         "cost_basis": (
@@ -227,7 +227,7 @@ def _write_report(
 
 
 def _run_historical() -> None:
-    frame = _fetch_four_year_frame()
+    frame = _fetch_three_year_frame()
     if frame.empty:
         runtime.emit_signal(
             action="watch",
@@ -237,8 +237,8 @@ def _run_historical() -> None:
             meta={"reason_code": "NO_REPLAY_DATA"},
         )
         return
-    if frame.index.min() > pd.Timestamp("2022-10-09T01:00:00Z"):
-        raise RuntimeError(f"four-year replay coverage incomplete: {frame.index.min()}")
+    if frame.index.min() > pd.Timestamp("2023-10-09T01:00:00Z"):
+        raise RuntimeError(f"three-year replay coverage incomplete: {frame.index.min()}")
     funding_by_settlement_ms = _fetch_historical_funding()
     result = backtest.run(
         ohlcv_data={"BTCUSDT.BITGET": frame},
@@ -249,7 +249,7 @@ def _run_historical() -> None:
 
     development_spec = json.loads(json.dumps(dict(runtime.backtest_spec)))
     development_spec["execution"] = {
-        "start": "2022-10-09T00:00:00Z",
+        "start": "2023-10-09T00:00:00Z",
         "end": "2024-10-09T00:00:00Z",
     }
     validation_spec = json.loads(json.dumps(dict(runtime.backtest_spec)))
@@ -325,7 +325,7 @@ def _run_historical() -> None:
             "period_start": frame.index.min().isoformat(),
             "period_end": frame.index.max().isoformat(),
             "walk_forward_split": {
-                "development": "2022-10-09/2024-10-08",
+                "development": "2023-10-09/2024-10-08",
                 "validation": "2024-10-09/2026-10-08",
             },
             "walk_forward": walk_forward,
