@@ -265,7 +265,8 @@ class Cycle:
                 net = fill["profit"] + fill["fees"] + float(pos.get("entry_fees") or 0.0)
                 self.state["closed"].append({"symbol": sym, "ts": fill["last_ts"] or self.now, "net": net,
                                              "r": net / self.p.risk_usdt, "code": code})
-                self.log(code, sym, side="sell", intended_price=pos.get("tp") if code == "EXIT_TP" else pos.get("stop"),
+                intended = {"EXIT_TP": pos.get("tp"), "EXIT_SL": pos.get("stop")}.get(code)
+                self.log(code, sym, side="sell", intended_price=intended,
                          filled_price=exit_px, fees=fill["fees"], funding="PENDING_NOT_IN_FILLS",
                          net_usdt=round(net, 4))
                 del self.state["positions"][sym]

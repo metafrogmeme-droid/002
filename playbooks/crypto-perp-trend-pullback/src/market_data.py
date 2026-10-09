@@ -63,10 +63,11 @@ def kline_rows(symbol: str, start_ms: int, end_ms: int, closed_only: bool = True
     return out
 
 
-def funding_rows(symbol: str, start_ms: int, end_ms: int, interval: str = "4h") -> list[dict]:
+def funding_rows(symbol: str, start_ms: int, end_ms: int, interval: str = "4h",
+                 exchange: str = "bitget") -> list[dict]:
     obb = data.crypto.futures.funding_rate(
         symbol=symbol,
-        exchange="bitget",
+        exchange=exchange,
         interval=interval,
         limit=1000,
         start_time=int(start_ms),
@@ -130,13 +131,14 @@ def load_history(symbols: list[str], start_ms: int, end_ms: int, funding_interva
         for lo, hi in _chunks(start_ms, end_ms, KLINE_CHUNK_MS):
             jobs.append((kline_rows, (sym, lo, hi)))
             tags.append((sym, "kline"))
-        for lo, hi in _chunks(start_ms, end_ms, FUNDING_CHUNK_MS):
-            jobs.append((funding_rows, (sym, lo, hi, funding_interval)))
-            tags.append((sym, "funding"))
+        for ex in ("bitget", "binance"):
+            for lo, hi in _chunks(start_ms, end_ms, FUNDING_CHUNK_MS):
+                jobs.append((funding_rows, (sym, lo, hi, funding_interval, ex)))
+                tags.append((sym, f"funding_{ex}"))
     results = _gather(jobs, concurrency)
 
     bars: dict[str, dict[int, dict]] = {s: {} for s in symbols}
-    fund: dict[str, dict[int, float]] = {s: {} for s in symbols}
+    fund: dict[str, dict[str, dict[int, float]]] = {s: {"bitget": {}, "binance": {}} for s in symbols}
     errors: list[str] = []
     for (sym, kind), res in zip(tags, results):
         if isinstance(res, Exception):
@@ -147,17 +149,30 @@ def load_history(symbols: list[str], start_ms: int, end_ms: int, funding_interva
                 if start_ms <= r["ts"] < end_ms:
                     bars[sym][r["ts"]] = r
         else:
+            ex = kind.split("_", 1)[1]
             for r in res:
-                fund[sym][r["ts"]] = r["funding_rate"]
+                fund[sym][ex][r["ts"]] = r["funding_rate"]
 
     frames: dict[str, pd.DataFrame] = {}
     funding: dict[str, list[tuple[int, float]]] = {}
     coverage: dict[str, Any] = {"errors": errors[:20], "symbols": {}}
     for sym in symbols:
         rows = [bars[sym][k] for k in sorted(bars[sym])]
-        fl = sorted(fund[sym].items())
+        native = sorted(fund[sym]["bitget"].items())
+        proxy = sorted(fund[sym]["binance"].items())
+        # Bitget funding where the SDK has it; Binance funding as a labelled proxy before that.
+        cut = native[0][0] if native else end_ms
+        fl = [x for x in proxy if x[0] < cut] + native
         funding[sym] = fl
-        info = {"bars": len(rows), "funding_rows": len(fl)}
+        info = {
+            "bars": len(rows),
+            "funding_rows": len(fl),
+            "funding_rows_bitget": len(native),
+            "funding_rows_binance_proxy": sum(1 for x in proxy if x[0] < cut),
+            "funding_bitget_from": pd.Timestamp(cut, unit="ms", tz="UTC").isoformat() if native else None,
+            "funding_sample_bitget": native[-3:],
+            "funding_sample_binance": proxy[-3:],
+        }
         if rows:
             info["first_bar"] = pd.Timestamp(rows[0]["ts"], unit="ms", tz="UTC").isoformat()
             info["last_bar"] = pd.Timestamp(rows[-1]["ts"], unit="ms", tz="UTC").isoformat()

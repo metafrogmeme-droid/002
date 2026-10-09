@@ -106,9 +106,9 @@ def main() -> None:
         trade_start_ms=start_ms,
         trade_end_ms=end_ms,
         ledger_path=str(ledger_path),
+        funding_json=json.dumps(funding),
     )
     strat = TrendPullbackStrategy(conf)
-    strat.set_feature_frames(frames)
     engine.add_strategy(strat)
     engine.run()
     engine.dispose()

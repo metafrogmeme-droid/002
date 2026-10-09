@@ -40,6 +40,7 @@ class TrendPullbackConfig(StrategyConfig):
     trade_end_ms: int = 0
     min_notional_usdt: float = 5.0
     ledger_path: str = "output/trades_ledger.json"
+    funding_json: str = ""
 
 
 class TrendPullbackStrategy(Strategy):
@@ -50,9 +51,9 @@ class TrendPullbackStrategy(Strategy):
         self._ids: list[InstrumentId] = []
         self._bar_types: list[BarType] = []
         self._ind: dict[str, Any] = {}
-        self._feature: dict[str, Any] = {}
-        self._open_time_index: dict[str, set] = {}
-        self._funding_by_ts: dict[str, dict[int, float]] = {}
+        self._funding: dict[str, tuple[list[int], list[float]]] = {}
+        self._funding_ptr: dict[str, int] = {}
+        self._load_funding()
         self._pending_ts: Optional[int] = None
         self._candidates: list[dict] = []
         self._seen_this_ts: set[str] = set()
@@ -68,17 +69,23 @@ class TrendPullbackStrategy(Strategy):
         self._halt_events: list[dict] = []
         self._needs_exit_bar: Optional[dict] = None
 
-    def set_feature_frames(self, feature_frames: dict) -> None:
-        self.feature_frames = feature_frames
-        for key, frame in (feature_frames or {}).items():
-            sym = str(key).split(".")[0]
-            idx_ns = [int(ts.value) for ts in frame.index]
-            self._open_time_index[sym] = set(idx_ns)
-            if "funding_rate" in frame.columns:
-                rates = frame["funding_rate"].tolist()
-                self._funding_by_ts[sym] = {
-                    ts: float(r) for ts, r in zip(idx_ns, rates) if r is not None and math.isfinite(float(r))
-                }
+    def _load_funding(self) -> None:
+        raw = json.loads(self.cfg.funding_json) if self.cfg.funding_json else {}
+        for sym, rows in raw.items():
+            pts = sorted((int(t), float(r)) for t, r in rows)
+            self._funding[sym] = ([t for t, _ in pts], [r for _, r in pts])
+            self._funding_ptr[sym] = -1
+
+    def _funding_at(self, sym: str, ts_ms: int) -> Optional[float]:
+        series = self._funding.get(sym)
+        if series is None:
+            return None
+        times, rates = series
+        i = self._funding_ptr[sym]
+        while i + 1 < len(times) and times[i + 1] <= ts_ms:
+            i += 1
+        self._funding_ptr[sym] = i
+        return rates[i] if i >= 0 else None
 
     def on_start(self) -> None:
         ids = list(self.cfg.instrument_ids)
@@ -100,8 +107,9 @@ class TrendPullbackStrategy(Strategy):
         iid = bar.bar_type.instrument_id
         sym = iid.symbol.value
         ts = int(bar.ts_event)
-        open_ns = ts - HOUR_NS if ts not in self._open_time_index.get(sym, ()) else ts
-        close_ms = (open_ns + HOUR_NS) // 1_000_000
+        # Replay frames are indexed by bar open time (Bitget kline ``time``).
+        open_ms = ts // 1_000_000
+        close_ms = open_ms + HOUR_NS // 1_000_000
 
         if self._pending_ts is not None and ts != self._pending_ts:
             self._flush_candidates()
@@ -124,7 +132,7 @@ class TrendPullbackStrategy(Strategy):
         self._manage_active(sym, iid, high, low, close_ms)
 
         if self.cfg.trade_start_ms <= close_ms and (self.cfg.trade_end_ms == 0 or close_ms <= self.cfg.trade_end_ms):
-            self._consider(sym, iid, snap, close_ms, open_ns)
+            self._consider(sym, iid, snap, close_ms, open_ms)
 
         if len(self._seen_this_ts) >= len(self._ids):
             self._flush_candidates()
@@ -132,7 +140,7 @@ class TrendPullbackStrategy(Strategy):
     def _skip(self, reason: str) -> None:
         self._skips[reason] = self._skips.get(reason, 0) + 1
 
-    def _consider(self, sym: str, iid: InstrumentId, snap: Any, close_ms: int, open_ns: int) -> None:
+    def _consider(self, sym: str, iid: InstrumentId, snap: Any, close_ms: int, open_ms: int) -> None:
         setup = evaluate_setup(snap, self.p)
         if not setup.ok:
             self._skip(setup.reason)
@@ -156,14 +164,18 @@ class TrendPullbackStrategy(Strategy):
         if qty <= 0:
             self._skip(size_reason)
             return
-        rate = self._funding_by_ts.get(sym, {}).get(open_ns)
-        fund = expected_funding_usdt(rate, qty * limit, close_ms, self.p)
-        if fund is None:
-            self._skip("SKIP_FUNDING_UNKNOWN")
-            return
-        if fund > self.p.max_funding_r * self.p.risk_usdt:
-            self._skip("SKIP_FUNDING_COST")
-            return
+        if sym in self._funding:
+            rate = self._funding_at(sym, open_ms)
+            fund = expected_funding_usdt(rate, qty * limit, close_ms, self.p)
+            if fund is None:
+                self._skip("SKIP_FUNDING_UNKNOWN")
+                return
+            if fund > self.p.max_funding_r * self.p.risk_usdt:
+                self._skip("SKIP_FUNDING_COST")
+                return
+        else:
+            rate = None
+            self._skip("FUNDING_GATE_UNAVAILABLE")
         self._candidates.append(
             {
                 "symbol": sym,
@@ -405,6 +417,7 @@ class TrendPullbackStrategy(Strategy):
             "events": self._events,
             "skips": self._skips,
             "halt_events": self._halt_events,
+            "funding_gate": "active" if self._funding else "unavailable",
             "open_at_end": None if self._active is None else {
                 k: (str(v) if k.endswith("_id") or k == "iid" else v) for k, v in self._active.items()
             },

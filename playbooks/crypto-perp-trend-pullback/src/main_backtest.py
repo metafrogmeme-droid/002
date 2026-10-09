@@ -35,6 +35,19 @@ def _clock() -> float:
     return datetime.now(timezone.utc).timestamp()
 
 
+def _data_sources(coverage: dict, led: dict) -> dict:
+    starts = {s: v.get("funding_bitget_from") for s, v in coverage.get("symbols", {}).items()}
+    return {
+        "signals_and_fills": "Bitget USDT-M perpetual 1H klines (getagent.data, exchange=bitget)",
+        "fees": "Bitget public contract config base tier: maker 0.02% entry, taker 0.06% every exit",
+        "slippage": "1 tick per side on every fill",
+        "funding": "Bitget funding history from the dates below; Binance USDT-M funding as proxy before",
+        "funding_bitget_from": starts,
+        "funding_gate": led.get("funding_gate"),
+        "spread_gate": "live only (no historical order book); Bitget majors quote ~0.01-0.1 bps",
+    }
+
+
 def _read_ledger() -> dict:
     for path in (OUT / "trades_ledger.json", Path("/workspace/output/trades_ledger.json")):
         if path.exists():
@@ -72,24 +85,7 @@ def run() -> None:
         if df is None or len(df) < p.warmup_bars + 24:
             skipped[sym] = "insufficient bars"
             continue
-        if not funding.get(sym):
-            skipped[sym] = "no funding history"
-            continue
-        fdf = pd.DataFrame(funding[sym], columns=["ts", "funding_rate"])
-        fdf["date"] = pd.to_datetime(fdf["ts"], unit="ms", utc=True)
-        frame = backtest.build_feature_frame(
-            df,
-            base_datetime_index="date",
-            features=[
-                backtest.FeatureSource(
-                    data=fdf[["date", "funding_rate"]],
-                    datetime_index="date",
-                    include_columns=("funding_rate",),
-                    mode="asof",
-                    direction="backward",
-                )
-            ],
-        )
+        frame = backtest.prepare_frame(df, datetime_index="date")
         ohlcv[ins["id"]] = frame
         loaded.append(ins)
 
@@ -114,6 +110,7 @@ def run() -> None:
         "trade_start_ms": start_ms,
         "trade_end_ms": end_ms,
         "ledger_path": str(OUT / "trades_ledger.json"),
+        "funding_json": json.dumps({s: funding.get(s, []) for s in loaded_syms if funding.get(s)}),
     })
 
     result = backtest.run(ohlcv_data=ohlcv, spec=spec)
@@ -149,6 +146,7 @@ def run() -> None:
         ),
         "playbook_report": rep,
         "data_coverage": coverage,
+        "data_sources": _data_sources(coverage, led),
         "symbols_skipped": skipped,
         "skips": led.get("skips", {}),
         "halt_events": led.get("halt_events", []),
@@ -200,7 +198,10 @@ def run() -> None:
                              for w in rep["walk_forward"]],
             "oos": {k: rep["out_of_sample"][k] for k in ("trades", "net_expectancy_r", "profit_factor")},
             "cost_totals_1x": rep["cost_totals_1x"],
+            "data_sources": _data_sources(coverage, led),
             "coverage": coverage,
             "symbols_skipped": skipped,
+            "skips": led.get("skips", {}),
+            "halt_events": len(led.get("halt_events", [])),
         }),
     )

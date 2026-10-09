@@ -15,7 +15,13 @@ strategy:
     symbols_csv: "BTCUSDT,ETHUSDT,SOLUSDT"
     venue_name: "BITGET"
     min_notional_usdt: 5.0
-    ledger_path: "output/trades_ledger.json"
+    trade_start_ms: 1727740800000
+    trade_end_ms: 1790812800000
+    ledger_path: "output/managed_replay_ledger.json"
+
+execution:
+  start: "2024-08-01T00:00:00Z"
+  end: "2026-10-01T00:00:00Z"
 
 # Precision and fees from Bitget public contract config (USDT-FUTURES), base fee tier.
 instruments:
@@ -62,6 +68,3 @@ instruments:
     taker_fee: "0.0006"
     bar_type: SOLUSDT.BITGET-1-HOUR-LAST-EXTERNAL
 
-data_requirements:
-  required_bar_fields:
-    - funding_rate
