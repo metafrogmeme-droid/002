@@ -1,0 +1,81 @@
+# Replay spec for bitget-usdtm-trend-v1 (USDT-M perpetuals, 1h bars).
+# Instrument precision/increments come from Bitget public contract config
+# (GET /api/v2/mix/market/contracts?productType=USDT-FUTURES&symbol=...,
+# retrieved at authoring time). Fees are the public default-tier rates and are
+# PENDING verification against the sub-account's actual tier.
+#
+# Engine balance is deliberately large so Nautilus margin checks never reject
+# an order; position sizing in this Playbook is driven by strategy_config
+# (risk_usdt / margin_budget), NOT by this balance.
+# No `execution:` window is declared on purpose: the engine would drop warm-up
+# bars. The evaluation window is strategy_config.trade_start / trade_end.
+venue:
+  name: BITGET
+  account_type: MARGIN
+  oms_type: NETTING
+  starting_balances:
+    - amount: 100000
+      currency: USDT
+
+strategy:
+  module: strategy
+  class: TrendStrategy
+  config_class: TrendStrategyConfig
+  config:
+    order_id_tag: "001"
+    instrument_ids:
+      - BTCUSDT.BITGET
+      - ETHUSDT.BITGET
+      - SOLUSDT.BITGET
+    bar_types:
+      - BTCUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+      - ETHUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+      - SOLUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+
+instruments:
+  - id: BTCUSDT.BITGET
+    kind: perpetual
+    raw_symbol: BTCUSDT
+    base_currency: BTC
+    quote_currency: USDT
+    settlement_currency: USDT
+    price_precision: 1
+    size_precision: 4
+    price_increment: "0.1"
+    size_increment: "0.0001"
+    lot_size: "0.0001"
+    maker_fee: "0.0002"
+    taker_fee: "0.0006"
+    bar_type: BTCUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+  - id: ETHUSDT.BITGET
+    kind: perpetual
+    raw_symbol: ETHUSDT
+    base_currency: ETH
+    quote_currency: USDT
+    settlement_currency: USDT
+    price_precision: 2
+    size_precision: 2
+    price_increment: "0.01"
+    size_increment: "0.01"
+    lot_size: "0.01"
+    maker_fee: "0.0002"
+    taker_fee: "0.0006"
+    bar_type: ETHUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+  - id: SOLUSDT.BITGET
+    kind: perpetual
+    raw_symbol: SOLUSDT
+    base_currency: SOL
+    quote_currency: USDT
+    settlement_currency: USDT
+    price_precision: 3
+    size_precision: 1
+    price_increment: "0.001"
+    size_increment: "0.1"
+    lot_size: "0.1"
+    maker_fee: "0.0002"
+    taker_fee: "0.0006"
+    bar_type: SOLUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+
+data_requirements:
+  required_bar_fields:
+    - funding_rate

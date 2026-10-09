@@ -1,0 +1,107 @@
+name: bitget-usdtm-trend-v1
+version: "1.0.0"
+display_name: "Bitget USDT-M Trend Long v1 (BTC / ETH / SOL)"
+display_name_i18n:
+  en: "Bitget USDT-M Trend Long v1 (BTC / ETH / SOL)"
+  zh: "Bitget USDT-M 趋势做多 v1（BTC / ETH / SOL）"
+  zh-tw: "Bitget USDT-M 趨勢做多 v1（BTC / ETH / SOL）"
+  es: "Bitget USDT-M Tendencia Larga v1 (BTC / ETH / SOL)"
+  ja: "Bitget USDT-M トレンドロング v1（BTC / ETH / SOL）"
+  vi: "Bitget USDT-M Xu hướng Mua v1 (BTC / ETH / SOL)"
+description: "Long-only, regime-filtered trend follower on Bitget BTC, ETH and SOL perpetuals with fixed-loss sizing and exchange-side stops"
+description_i18n:
+  en: "Long-only, regime-filtered trend follower on Bitget BTC, ETH and SOL perpetuals with fixed-loss sizing and exchange-side stops"
+  zh: "仅做多、带行情过滤的趋势跟随策略，覆盖 Bitget BTC、ETH、SOL 永续合约，固定亏损仓位与交易所端止损"
+  zh-tw: "僅做多、帶行情過濾的趨勢跟隨策略，涵蓋 Bitget BTC、ETH、SOL 永續合約，固定虧損倉位與交易所端止損"
+  es: "Seguidor de tendencia solo largo con filtro de régimen en perpetuos BTC, ETH y SOL de Bitget, con tamaño de pérdida fija y stops en el exchange"
+  ja: "Bitget の BTC・ETH・SOL 無期限先物向け、ロング専用でレジームフィルター付きのトレンドフォロー。固定損失サイズと取引所側ストップ"
+  vi: "Chiến lược bám xu hướng chỉ mua, có bộ lọc chế độ thị trường, cho hợp đồng vĩnh cửu BTC, ETH, SOL trên Bitget với khối lượng theo mức lỗ cố định và dừng lỗ phía sàn"
+long_description: |
+  This Playbook is a long-only trend-following strategy on three liquid Bitget USDT-margined perpetual contracts: Bitcoin, Ether and Solana. It aims to capture the continuation phase of an established uptrend and deliberately sits out sideways, dead-quiet and abnormally violent markets. This version never trades the short side.
+
+  Entry logic: the Playbook opens a long position only when the hourly price structure turns bullish again inside a strong trend. The faster trend read sits above the slower one, price reclaims the faster read, and directional strength favours buyers. Two gates must pass first: the market must be in a tradable regime, with strong trend strength and volatility inside a sensible band, and the triggering bar must show clearly above-normal participation. Entries are patient limit orders cancelled if not filled within a short window. New entries are avoided around funding settlements, and symbols whose funding clearly works against a long are skipped.
+
+  Exit and stop logic: every position is sized so that a stop-out costs a fixed, small amount of equity, whatever the symbol or volatility. The protective stop and profit target are attached to the order on the exchange side, so there is no unprotected gap after a fill. Winners close at a fixed multiple of the initial risk, losers at the stop, and trades that go nowhere are closed by a time limit. Margin is isolated, leverage is capped conservatively, and only a few positions can be open at once, never more than one per symbol.
+
+  Tunable parameters: subscribers can adjust the margin budget, which is the capital basis for the leverage check and return calculations, and a reset marker that deliberately resumes entries after a safety halt. Raising the budget relaxes the leverage check but does not change the amount risked per trade. Every other rule is frozen.
+
+  Safety halts: the Playbook stops opening new trades after consecutive losses, a large daily realised loss, stale market data, or a position it did not open itself. A halt only stops new entries and raises an alert; it never closes positions on its own.
+
+  Risks: trend strategies lose small amounts repeatedly in choppy markets, can suffer slippage through stops in violent moves, pay fees and funding, and may miss limit-order fills. Drawdowns can be far larger than a single risk unit. Simulated results are not a guarantee of future performance, and none is claimed here.
+market_type: contract
+trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+tags: ["trend", "long-only", "adx", "ema", "isolated-margin", "contract", "bitget"]
+
+schedule:
+  cron: "*/15 * * * *"
+  tz: "UTC"
+
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+
+strategy_config:
+  trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+  # ---- v1 FROZEN trading rules (hashed in docs/VERSIONING.md) ----
+  timeframe: "1h"
+  ema_fast: 20
+  ema_slow: 50
+  adx_period: 14
+  adx_min: 25.0
+  atr_period: 14
+  atr_pct_lookback_bars: 2160
+  atr_pct_min_history_bars: 500
+  atr_pct_rank_low: 20.0
+  atr_pct_rank_high: 90.0
+  volume_lookback_bars: 20
+  volume_mult: 1.5
+  entry_offset_atr: 0.0
+  stop_atr_mult: 1.5
+  tp_r_mult: 2.0
+  risk_usdt: 15.0
+  leverage_cap: 5
+  margin_mode: "isolated"
+  entry_expiry_hours: 4.0
+  time_stop_hours: 8.0
+  funding_window_minutes: 15
+  funding_hours_utc: [0, 8, 16]
+  funding_adverse_max: 0.0003
+  max_concurrent: 3
+  max_per_symbol: 1
+  daily_pause_usdt: 30.0
+  hard_stop_usdt: 40.0
+  max_consecutive_losses: 5
+  stale_data_seconds: 60
+  entry_max_signal_age_minutes: 15
+  allow_short: false
+  short_enable_min_trades: 30
+  maker_fee: 0.0002
+  taker_fee: 0.0006
+  slippage_ticks: 1
+  # ---- evaluation / deployment keys (NOT part of the v1 hash) ----
+  margin_budget: "1000"
+  halt_reset_after_ts_ms: 0
+  cost_multiplier: 1.0
+  trade_start: ""
+  trade_end: ""
+  warmup_days: 100
+  wf_train_months: 12
+  wf_test_months: 3
+  wf_step_months: 3
+  require_funding_data: true
+  backtest_halt_resume_hours: 72
+  bar_ts_convention: "open"
+
+user_config_schema:
+  margin_budget:
+    type: string
+    default: "1000"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Isolated sub-account equity basis (USDT) - PENDING: set to your real allocation"
+  halt_reset_after_ts_ms:
+    type: integer
+    default: 0
+    min: 0
+    label: "Resume marker (Unix ms): losses before this time no longer count toward a halt"
