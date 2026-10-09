@@ -533,6 +533,9 @@ def _run_live() -> None:
     if state.get("daily_date") != today:
         state["daily_date"] = today
         state["daily_realized_usdt"] = "0"
+    if not bool(cfg.get("activation_eligible", False)):
+        _emit_hold("RESEARCH_VALIDATION_FAILED", {}, state)
+        return
 
     if not trade.account.subaccount_exists():
         _emit_hold("NO_ISOLATED_SUBACCOUNT", {}, state)

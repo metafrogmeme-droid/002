@@ -40,6 +40,7 @@ schedule:
   tz: "UTC"
 
 strategy_config:
+  activation_eligible: false
   trading_symbols: ["BTCUSDT"]
   leverage: 5
   margin_budget: "300"

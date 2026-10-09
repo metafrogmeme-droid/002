@@ -1,5 +1,10 @@
 # BTC Net Expectancy
 
+**Research status:** rejected and fail-closed. `activation_eligible` is `false`;
+live execution emits `RESEARCH_VALIDATION_FAILED` and places no order. Do not
+activate this package unless a later, separately validated version passes every
+declared evidence gate.
+
 ## 策略 / Strategy
 
 This is one long-only Sleeve A Playbook for the Bitget `BTCUSDT` USDT perpetual. It seeks hourly momentum recoveries after pullbacks inside a rising long-term trend, only when trend strength and the volatility regime agree. It is designed for an isolated sub-account dedicated to this Playbook. It never opens shorts. Missing, stale, invalid, or unsupported data produces `NO TRADE`.
