@@ -144,26 +144,45 @@ def _fetch_historical_funding() -> dict[int, float]:
     end = datetime(2026, 10, 9, tzinfo=timezone.utc)
     start = datetime(2024, 10, 9, tzinfo=timezone.utc)
     settlements: dict[int, float] = {}
-    response = data.crypto.futures.funding_rate(
-        symbol=SYMBOL,
-        exchange="bitget",
-        interval="1h",
-        limit=1000,
-        start_time=int((end - timedelta(days=40)).timestamp() * 1000),
-        end_time=int(end.timestamp() * 1000),
-    )
-    for row in _records(response):
-        settlement_ms = _timestamp_ms(row.get("next_funding_time"))
-        rate = row.get("funding_rate")
-        if settlement_ms > 0 and rate not in (None, ""):
-            settlements[settlement_ms] = float(rate)
+    cursor = start
+    while cursor < end:
+        chunk_end = min(cursor + timedelta(days=40), end)
+        try:
+            response = data.crypto.futures.funding_rate(
+                symbol=SYMBOL,
+                exchange="bitget",
+                interval="1h",
+                limit=1000,
+                start_time=int(cursor.timestamp() * 1000),
+                end_time=int(chunk_end.timestamp() * 1000),
+            )
+        except Exception:
+            return {}
+        for row in _records(response):
+            settlement_ms = _timestamp_ms(
+                row.get("next_funding_time")
+                or row.get("timestamp")
+                or row.get("date")
+            )
+            rate = row.get("funding_rate")
+            if settlement_ms <= 0 or rate in (None, ""):
+                continue
+            settlement_time = datetime.fromtimestamp(
+                settlement_ms / 1000,
+                tz=timezone.utc,
+            )
+            if settlement_time.minute != 0 or settlement_time.hour not in (0, 8, 16):
+                continue
+            if int(start.timestamp() * 1000) < settlement_ms <= int(end.timestamp() * 1000):
+                settlements[settlement_ms] = float(rate)
+        cursor = chunk_end
     if not settlements:
         return {}
     earliest = min(settlements)
     latest = max(settlements)
-    if earliest > int((start + timedelta(hours=8)).timestamp() * 1000):
+    if earliest > int((start + timedelta(hours=24)).timestamp() * 1000):
         return {}
-    if latest < int((end - timedelta(hours=8)).timestamp() * 1000):
+    if latest < int((end - timedelta(hours=24)).timestamp() * 1000):
         return {}
     return settlements
 
