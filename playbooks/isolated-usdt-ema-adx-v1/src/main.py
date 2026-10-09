@@ -74,13 +74,17 @@ def _cost_spec(multiplier: float) -> dict[str, Any]:
 
 def _result_metrics(result: Any, risk_usdt: float) -> dict[str, Any]:
     summary = result.summary or {}
-    trades = int(result.total_trades or 0)
+    fills = int(result.fill_count or 0)
+    # The engine's total_trades is a fill count. One completed long normally
+    # has an entry and an exit, so acceptance thresholds use closed positions.
+    trades = int(result.position_count or 0)
     net_pnl = float(summary.get("net_pnl", 0.0) or 0.0)
     net_expectancy_r = (
         net_pnl / (trades * risk_usdt) if trades > 0 else None
     )
     return {
         "trades": trades,
+        "fills": fills,
         "win_rate": _finite(result.win_rate),
         "average_r": _finite(net_expectancy_r),
         "net_expectancy_r": _finite(net_expectancy_r),
