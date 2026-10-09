@@ -87,15 +87,24 @@ def _trade_metrics(
 
 
 def _evaluation_metrics(result: Any, trade_metrics: dict[str, Any]) -> dict[str, Any]:
+    funding_available = trade_metrics["funding_settlements_loaded"] > 0
     return {
         "trades": trade_metrics["round_trip_trades"],
         "win_rate": trade_metrics["win_rate_round_trip"],
-        "avg_r": trade_metrics["avg_r"],
-        "net_expectancy_r": trade_metrics["net_expectancy_r"],
-        "profit_factor": trade_metrics["profit_factor_net"],
+        "avg_r": trade_metrics["avg_r"] if funding_available else None,
+        "net_expectancy_r": (
+            trade_metrics["net_expectancy_r"] if funding_available else None
+        ),
+        "profit_factor": (
+            trade_metrics["profit_factor_net"] if funding_available else None
+        ),
+        "avg_r_ex_funding": trade_metrics["avg_r"],
+        "net_expectancy_r_ex_funding": trade_metrics["net_expectancy_r"],
+        "profit_factor_ex_funding": trade_metrics["profit_factor_net"],
+        "funding_status": "modeled" if funding_available else "PENDING",
         "max_drawdown_pct": _finite(result.max_drawdown_pct),
         "sharpe": _finite(result.sharpe_ratio),
-        "cost_sensitivity": trade_metrics["cost_sensitivity"],
+        "cost_sensitivity_ex_funding": trade_metrics["cost_sensitivity"],
     }
 
 
@@ -155,8 +164,6 @@ def _fetch_two_year_funding() -> dict[int, float]:
             ):
                 settlements[settlement_ms] = float(rate)
         cursor = chunk_end
-    if not settlements:
-        raise RuntimeError("historical funding coverage unavailable")
     return settlements
 
 
@@ -185,7 +192,11 @@ def _write_report(
             "development": "2024-10-09/2025-10-08",
             "validation": "2025-10-09/2026-10-08",
         },
-        "cost_basis": "public maker/taker fees plus two ticks per round trip and modeled historical funding; account-tier rate pending",
+        "cost_basis": (
+            "public maker/taker fees plus two ticks per round trip and modeled historical funding; account-tier rate pending"
+            if trade_metrics["funding_settlements_loaded"] > 0
+            else "public maker/taker fees plus two ticks per round trip; historical funding and account-tier rate pending"
+        ),
     }
     reports = raw.get("reports")
     if isinstance(reports, dict):
@@ -283,18 +294,26 @@ def _run_historical() -> None:
         "round_trip_trades": trade_metrics["round_trip_trades"],
         "win_rate_round_trip": trade_metrics["win_rate_round_trip"],
         "rows": len(frame),
-        "avg_r": trade_metrics["avg_r"],
-        "net_expectancy_r": trade_metrics["net_expectancy_r"],
-        "profit_factor_net": trade_metrics["profit_factor_net"],
+        "avg_r": trade_metrics["avg_r"] if funding_by_settlement_ms else None,
+        "net_expectancy_r": (
+            trade_metrics["net_expectancy_r"] if funding_by_settlement_ms else None
+        ),
+        "profit_factor_net": (
+            trade_metrics["profit_factor_net"] if funding_by_settlement_ms else None
+        ),
+        "avg_r_ex_funding": trade_metrics["avg_r"],
+        "net_expectancy_r_ex_funding": trade_metrics["net_expectancy_r"],
+        "profit_factor_ex_funding": trade_metrics["profit_factor_net"],
         "cost_sensitivity_0x": trade_metrics["cost_sensitivity"]["0x"]["expectancy_r"],
         "cost_sensitivity_1x": trade_metrics["cost_sensitivity"]["1x"]["expectancy_r"],
         "cost_sensitivity_2x": trade_metrics["cost_sensitivity"]["2x"]["expectancy_r"],
     }
-    verdict = (
-        "PENDING_FEWER_THAN_30_TRADES"
-        if trade_metrics["round_trip_trades"] < 30
-        else "PENDING_FUNDING_AND_FORWARD"
-    )
+    if trade_metrics["round_trip_trades"] < 30:
+        verdict = "PENDING_FEWER_THAN_30_TRADES"
+    elif not funding_by_settlement_ms:
+        verdict = "PENDING_HISTORICAL_FUNDING"
+    else:
+        verdict = "PENDING_FORWARD"
     runtime.emit_signal(
         action="watch",
         symbol=SYMBOL,
@@ -311,10 +330,12 @@ def _run_historical() -> None:
             },
             "walk_forward": walk_forward,
             "selection_note": "validation is a fixed time split, but prior aggregate candidate inspection creates selection leakage",
-            "cost_sensitivity": trade_metrics["cost_sensitivity"],
-            "pending": [
-                "account-tier fees",
-            ],
+            "cost_sensitivity_ex_funding": trade_metrics["cost_sensitivity"],
+            "pending": (
+                ["account-tier fees"]
+                if funding_by_settlement_ms
+                else ["account-tier fees", "historical funding"]
+            ),
         },
     )
 
