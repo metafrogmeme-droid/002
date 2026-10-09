@@ -157,6 +157,21 @@ def _finish(cfg: Any, result: Any, coverage: list[dict[str, Any]], start_ms: int
                 "coverage_ok": coverage_ok,
                 "fee_tier_status": cfg.fee_tier_status,
                 "live_trades": 0,
+                "coverage": [
+                    {
+                        "symbol": item.get("symbol"),
+                        "kline_rows": item.get("kline_rows"),
+                        "funding_rows": item.get("funding_rows"),
+                        "kline_first_ms": item.get("kline_first_ms"),
+                        "kline_last_ms": item.get("kline_last_ms"),
+                        "funding_first_ms": item.get("funding_first_ms"),
+                        "funding_last_ms": item.get("funding_last_ms"),
+                        "funding_symbol_argument": item.get("funding_symbol_argument"),
+                        "index_first": item.get("index_first"),
+                        "index_last": item.get("index_last"),
+                    }
+                    for item in coverage
+                ],
             }
         ),
         meta={
