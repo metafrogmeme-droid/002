@@ -1,5 +1,6 @@
 name: isolated-usdt-ema-adx
 display_name: "BTC ETH SOL Isolated EMA-ADX"
+version: "1.0.0"
 display_name_i18n:
   en: "BTC ETH SOL Isolated EMA-ADX"
   zh: "BTC ETH SOL 逐仓 EMA-ADX"
