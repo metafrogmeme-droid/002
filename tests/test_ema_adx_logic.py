@@ -20,6 +20,7 @@ from risk import (  # noqa: E402
     exposure_hits_blackout,
     funding_page_ignores_window,
     funding_rate_from_managed,
+    funding_series_gap_ms,
     in_funding_blackout,
     plan_long_size,
 )
@@ -181,6 +182,13 @@ class RiskTests(unittest.TestCase):
         self.assertAlmostEqual(decimal_rate, 0.00004)
         self.assertLess(decimal_rate, 0.0003)
         self.assertGreater(0.004, 0.0003)
+
+    def test_funding_gap_is_reported_and_not_filled(self):
+        day = 24 * 60 * 60 * 1000
+        daily = [0, day, 2 * day]
+        self.assertIsNone(funding_series_gap_ms(daily, 36 * 60 * 60 * 1000))
+        hole = [0, day, day + 48 * 60 * 60 * 1000]
+        self.assertEqual(funding_series_gap_ms(hole, 36 * 60 * 60 * 1000), 48 * 60 * 60 * 1000)
 
     def test_repeated_latest_funding_page_is_not_coverage(self):
         # 2026-07-12T00:00:00Z against a cursor parked on that same instant.

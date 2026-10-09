@@ -22,6 +22,21 @@ def funding_rate_from_managed(raw: float) -> float:
     return raw / MANAGED_FUNDING_PERCENT_SCALE
 
 
+def funding_series_gap_ms(stamps: Sequence[int], max_gap_ms: int) -> int | None:
+    """Largest hole between stamps, or None when every step is inside the cap.
+
+    A hole is left empty. Callers must not fill it with zero or with the
+    previous rate.
+    """
+    ordered = sorted({int(stamp) for stamp in stamps})
+    worst: int | None = None
+    for prev, nxt in zip(ordered, ordered[1:]):
+        gap = nxt - prev
+        if gap > max_gap_ms and (worst is None or gap > worst):
+            worst = gap
+    return worst
+
+
 def funding_page_ignores_window(
     earliest_ms: int, latest_ms: int, cursor_end_ms: int, interval_ms: int
 ) -> bool:

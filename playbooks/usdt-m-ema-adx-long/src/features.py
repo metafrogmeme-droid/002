@@ -142,11 +142,16 @@ def fetch_funding(symbol: str, start_ms: int, end_ms: int) -> tuple[list[dict[st
     with zero. The pair symbol is tried before the base asset. Among
     non-empty walks, the earliest series wins, then the one with more rows.
 
-    Measured on 2026-10-10: `crypto.futures.funding_rate` with
-    start_time=1728432000000 (2024-10-09) still returned bitget_data rows
-    whose first `timestamp` is 2026-07-12T00:00:00Z. The same first timestamp
-    came back with end_time set to that 2024 boundary, with no window, and
-    with days=90. Interval 8h is rejected. Symbol BTC (base) is empty.
+    Measured on 2026-10-10: `crypto.futures.funding_rate` (bitget_data) ignores
+    a 2024 start and its earliest row is 2026-07-12T00:00:00Z.
+    `crypto.futures.funding_weighted` (coinglass, base symbol, interval 1d,
+    weight_type volume) does honor that start: BTC, ETH, and SOL each returned
+    730 daily rows from 2024-10-09 through 2026-10-08 with no gap above 36h.
+    That series is a cross-exchange volume-weighted rate, not Bitget's own
+    settlement print. Its percent display is divided by 100, the same unit
+    conversion as bitget_data (BTC 2026-10-08 weighted 0.003811 versus the
+    public Bitget print 0.00004). A 4h weighted request did not start on
+    2024-10-09, so the daily series is the one used.
     """
     try:
         from .risk import funding_rate_from_managed
@@ -157,20 +162,26 @@ def fetch_funding(symbol: str, start_ms: int, end_ms: int) -> tuple[list[dict[st
     attempts: list[dict[str, Any]] = []
     best_rows: list[dict[str, Any]] | None = None
     best_info: dict[str, Any] | None = None
-    best_rank: tuple[int, int] | None = None
-    for candidate in (symbol, base):
-        for interval in ("4h", "1d", "1h"):
-            rows, info = _walk_funding(candidate, interval, start_ms, end_ms)
-            attempts.append(info)
-            if not rows:
-                continue
-            scaled = _scale_funding_rows(rows, funding_rate_from_managed)
-            earliest = int(info.get("earliest_ms") or 0)
-            rank = (earliest, -len(scaled))
-            if best_rank is None or rank < best_rank:
-                best_rank = rank
-                best_rows = scaled
-                best_info = info
+    weighted_rows, weighted_info = _walk_weighted_funding(base, start_ms, end_ms)
+    attempts.append(weighted_info)
+    if weighted_rows and not weighted_info.get("stalled"):
+        best_rows = _scale_funding_rows(weighted_rows, funding_rate_from_managed)
+        best_info = weighted_info
+    else:
+        best_rank: tuple[int, int] | None = None
+        for candidate in (symbol, base):
+            for interval in ("4h", "1d", "1h"):
+                rows, info = _walk_funding(candidate, interval, start_ms, end_ms)
+                attempts.append(info)
+                if not rows:
+                    continue
+                scaled = _scale_funding_rows(rows, funding_rate_from_managed)
+                earliest = int(info.get("earliest_ms") or 0)
+                rank = (earliest, -len(scaled))
+                if best_rank is None or rank < best_rank:
+                    best_rank = rank
+                    best_rows = scaled
+                    best_info = info
     if not best_rows or best_info is None:
         raise DataCoverageError(
             f"{symbol}: funding_rate unavailable ({_attempt_summary(attempts)})"
@@ -214,6 +225,90 @@ def _scale_funding_rows(rows: list[dict[str, Any]], scaler: Any) -> list[dict[st
         copied["funding_rate"] = rate
         scaled.append(copied)
     return scaled
+
+
+def _walk_weighted_funding(
+    base: str, start_ms: int, end_ms: int
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Forward-page the daily cross-exchange series. Do not fill holes."""
+    try:
+        from .risk import funding_series_gap_ms
+    except ImportError:
+        from risk import funding_series_gap_ms
+
+    page_span = 80 * 24 * HOUR_MS
+    max_gap = 36 * HOUR_MS
+    collected: dict[int, dict[str, Any]] = {}
+    cursor = start_ms
+    stalled = ""
+    pages = 0
+    first_request: dict[str, Any] | None = None
+    while cursor < end_ms and pages < 16:
+        chunk_end = min(end_ms, cursor + page_span)
+        pages += 1
+        try:
+            page = data.crypto.futures.funding_weighted(
+                symbol=base,
+                interval="1d",
+                start_time=cursor,
+                end_time=chunk_end,
+                limit=1000,
+                weight_type="volume",
+            )
+        except Exception as exc:
+            stalled = type(exc).__name__
+            if first_request is None:
+                first_request = {"start_time": cursor, "end_time": chunk_end, "error": stalled}
+            break
+        page_rows: list[dict[str, Any]] = []
+        for row in data.to_records(page):
+            stamp = _time_ms(row)
+            raw = row.get("weighted_funding_rate")
+            if stamp is None or raw is None or stamp < start_ms or stamp > end_ms:
+                continue
+            if stamp < cursor or stamp > chunk_end:
+                continue
+            copied = dict(row)
+            copied["funding_rate"] = raw
+            page_rows.append(copied)
+        if first_request is None:
+            first_request = {
+                "start_time": cursor,
+                "end_time": chunk_end,
+                "rows": len(page_rows),
+            }
+        if not page_rows:
+            stalled = "empty"
+            break
+        earliest = min(_time_ms(row) or 0 for row in page_rows)
+        if earliest > chunk_end:
+            stalled = "window_ignored"
+            break
+        for row in page_rows:
+            stamp = _time_ms(row)
+            if stamp is not None:
+                collected[stamp] = row
+        cursor = chunk_end
+    rows = [collected[stamp] for stamp in sorted(collected)]
+    earliest_ms = min(collected) if collected else None
+    latest_ms = max(collected) if collected else None
+    gap_ms = funding_series_gap_ms(list(collected), max_gap) if collected else None
+    if gap_ms is not None and not stalled:
+        stalled = "gap"
+    if rows and earliest_ms is not None and earliest_ms > start_ms and not stalled:
+        stalled = "short_of_start"
+    return rows, {
+        "symbol": base,
+        "interval": "1d",
+        "source": "crypto.futures.funding_weighted",
+        "rows": len(rows),
+        "earliest_ms": earliest_ms,
+        "latest_ms": latest_ms,
+        "stalled": stalled,
+        "gap_ms": gap_ms,
+        "pages": pages,
+        "first_request": first_request or {},
+    }
 
 
 def _walk_funding(
@@ -364,11 +459,13 @@ def build_replay_frame(symbol: str, start_ms: int, end_ms: int) -> tuple[Any, di
         "symbol": native,
         "requested_symbol": symbol,
         "funding_symbol_argument": funding_symbol,
+        "funding_source": funding_info.get("source") or "crypto.futures.funding_rate",
         "funding_interval": funding_info.get("interval"),
         "funding_stalled": funding_info.get("stalled"),
+        "funding_gap_ms": funding_info.get("gap_ms"),
         "funding_pages": funding_info.get("pages"),
         "funding_first_request": funding_info.get("first_request"),
-        "funding_scale": "managed_percent_display_divided_by_100",
+        "funding_scale": "percent_display_divided_by_100",
         "kline_rows": len(bars),
         "funding_rows": len(funding_rows),
         "kline_first_ms": _time_ms(bars[0]),

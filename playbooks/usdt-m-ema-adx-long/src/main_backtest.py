@@ -167,8 +167,10 @@ def _finish(cfg: Any, result: Any, coverage: list[dict[str, Any]], start_ms: int
                         "funding_first_ms": item.get("funding_first_ms"),
                         "funding_last_ms": item.get("funding_last_ms"),
                         "funding_symbol_argument": item.get("funding_symbol_argument"),
+                        "funding_source": item.get("funding_source"),
                         "funding_interval": item.get("funding_interval"),
                         "funding_stalled": item.get("funding_stalled"),
+                        "funding_gap_ms": item.get("funding_gap_ms"),
                         "funding_pages": item.get("funding_pages"),
                         "index_first": item.get("index_first"),
                         "index_last": item.get("index_last"),
@@ -199,6 +201,8 @@ def _coverage_ok(coverage: list[dict[str, Any]], start_ms: int, end_ms: int) -> 
         if first > start_ms + HOUR_MS or last < end_ms - 2 * HOUR_MS:
             return False
         if fund_first > start_ms + 24 * HOUR_MS or fund_last < end_ms - 24 * HOUR_MS:
+            return False
+        if item.get("funding_stalled"):
             return False
     return True
 
