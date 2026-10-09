@@ -26,7 +26,8 @@ class BtcNetExpectancyConfig(StrategyConfig):
     atr_percentile_lookback: int = 168
     atr_percentile_min: str = "30"
     atr_percentile_max: str = "75"
-    min_atr_pct: str = "0.7"
+    breakout_atr_buffer: str = "0.25"
+    close_location_min: str = "0.75"
     take_profit_r: str = "2"
     time_stop_hours: int = 8
     order_ttl_hours: int = 4
@@ -137,7 +138,12 @@ class BtcNetExpectancyStrategy(Strategy):
         quote_volume_24h = sum(
             self._volumes[-24 + i] * self._closes[-24 + i] for i in range(24)
         )
-        if close <= prior_high:
+        breakout_strength = (close - prior_high) / atr
+        bar_range = high - low
+        close_location = (close - low) / bar_range if bar_range > 0 else 0.0
+        if breakout_strength < float(self.cfg.breakout_atr_buffer):
+            return
+        if close_location < float(self.cfg.close_location_min):
             return
         if close <= trend_now or trend_now <= trend_then:
             return
@@ -148,8 +154,6 @@ class BtcNetExpectancyStrategy(Strategy):
             <= atr_percentile
             <= float(self.cfg.atr_percentile_max)
         ):
-            return
-        if atr / close * 100.0 < float(self.cfg.min_atr_pct):
             return
         if quote_volume_24h < float(self.cfg.min_24h_volume_usdt):
             return

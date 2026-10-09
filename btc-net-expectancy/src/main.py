@@ -544,12 +544,19 @@ def _run_live() -> None:
         closes[-trend_period - trend_slope_hours : -trend_slope_hours],
         trend_period,
     )
+    latest_high = Decimal(str(rows[-1]["high"]))
+    latest_low = Decimal(str(rows[-1]["low"]))
+    latest_range = latest_high - latest_low
+    breakout_strength = (close - breakout) / atr
+    close_location = (
+        (close - latest_low) / latest_range if latest_range > 0 else Decimal("0")
+    )
     signal_ok = (
-        close > breakout
+        breakout_strength >= Decimal(str(cfg["breakout_atr_buffer"]))
+        and close_location >= Decimal(str(cfg["close_location_min"]))
         and close > trend_now
         and trend_now > trend_then
         and adx >= Decimal(str(cfg["adx_min"]))
-        and atr / close * Decimal("100") >= Decimal(str(cfg["min_atr_pct"]))
         and Decimal(str(cfg["atr_percentile_min"])) <= atr_percentile <= Decimal(str(cfg["atr_percentile_max"]))
     )
     if not signal_ok:
