@@ -5,6 +5,7 @@ rules for one DataSDK domain. All generated `getagent.data` endpoints
 are callable through the DataSDK wrapper.
 
 ## Contents
+- [`equity.calendar`](#equitycalendar)
 - [`equity.calendar.dividend`](#equitycalendardividend)
 - [`equity.calendar.earnings`](#equitycalendarearnings)
 - [`equity.calendar.events`](#equitycalendarevents)
@@ -129,6 +130,8 @@ data.equity.fundamental.balance(
 | `equity.estimates.price_target` | `start_date`, `end_date`, `rating_org` |
 | `equity.estimates.forward_pe`, `equity.estimates.forward_eps`, `equity.estimates.forward_ebitda`, `equity.estimates.forward_sales` | `annual`, `is_actual_value` |
 | `equity.estimates.consensus` | `fore_indicator_name` (`symbol` is required for THS) |
+| `equity.calendar` | `fiscal_year`, `start_date`, `end_date` (not paginated) |
+| `equity.fundamental.dividends` | `start_date`, `end_date`, `event_type` (not paginated; `event_type` is `现金分红` / `股票拆分` / `股票分红`) |
 | `equity.fund_flow.etf` | `start_date`, `end_date` (latest 30 days if omitted) |
 
 ### `bitget_data` response fields
@@ -138,6 +141,8 @@ should read. Additional THS columns may be present.
 
 | Endpoint | Fields to read |
 |---|---|
+| `equity.calendar` | `symbol`, `period_ending`, `fiscal_year`, `name`, `listed_country_code`, `listed_country_name`, `report_type_code`, `report_type_name`, `org_id`, `perf_briefing_fore_dsclsr_date`, `perf_brief_dsclsr_date`, `perf_report_dsclsr_date`, `perf_report_fore_dsclsr_date`, `is_trading_time` |
+| `equity.fundamental.dividends` | `symbol`, `ex_dividend_date`, `amount`, `currency`, `declaration_date`, `record_date`, `payment_date`, `sec_id`, `event_type`, `is_special_dividend`, `stock_dividend_ps`, `currency_name`, `split_valid_date`, `split_numerator`, `split_denominator`, `third_party_dividend_ps`, `third_party_id` |
 | `equity.profile` | `symbol`, `name`, `legal_name`, `cusip`, `isin`, `stock_exchange`, `short_description`, `long_description`, `ceo`, `inc_country`, `employees`, `entity_legal_form`, `entity_status`, `industry_category`, `standardized_active`, `first_stock_price_date`, `currency_code`, `reg_region`, `org_type`, `industry_name`, `listed_board_name`, `development_history` |
 | `equity.fundamental.management` | `title`, `name`, `pay`, `currency_pay`, `gender`, `year_born`, `sec_code`, `sec_short_name_cn`, `name_cn`, `nationality`, `high_edu`, `resume_cn`, `resume_en`, `position_name_cn`, `manage_type`, `publish_age_on_ed`, `latest_salary_year`, `latest_report_period`, `share_held_num`, `total_held_ratio_cacl_value`, `total_voting_right` |
 | `equity.fundamental.balance` | `symbol`, `period_ending`, `fiscal_year`, `fiscal_period`, `currency_code`, `cce`, `net_receivables`, `inventory`, `total_current_assets`, `net_property_plant_and_equip`, `goodwill`, `net_intangible_assets`, `total_noncurrent_assets`, `total_assets`, `accounts_payable`, `st_debt`, `lt_debt`, `total_current_liab`, `total_noncurrent_liab`, `total_liab`, `common_stock`, `preferred_stock`, `retained_earning`, `treasury_stock`, `minority_interest`, `total_holders_equity` |
@@ -159,6 +164,56 @@ should read. Additional THS columns may be present.
 | `equity.fund_flow.etf` | `date`, `stock_code`, `stock_name`, `etf_count`, `etf_inflow_value`, `etf_outflow_value`, `etf_inflow_count`, `etf_outflow_count`, `etf_net_flow_value` |
 
 ## Endpoint reference
+
+### `equity.calendar`
+
+```python
+data.equity.calendar(symbol="AAPL", fiscal_year=None, start_date=None, end_date=None, provider="bitget_data")
+```
+
+Summary: Earnings-report disclosure dates
+
+| Field | Value |
+|---|---|
+| Endpoint ID | `equity.calendar` |
+| HTTP | `GET` |
+| Path | `/inner/v1/agent-data/equity/calendar/` |
+| SDK | `supported` |
+| Host | `supported` |
+| Notes | THS-only (`provider="bitget_data"`). Company earnings-report disclosure calendar, not the cross-name `equity.calendar.earnings` endpoint. |
+
+**bitget_data** provider:
+
+| Param | Required | Type | Default | Notes |
+|---|---|---|---|---|
+| `symbol` | `yes` | `string` | `-` | Single US ticker. Required for THS. |
+| `fiscal_year` | `no` | `integer / string / null` | `-` | Fiscal year, e.g. `2024`. Sent upstream as `fiscal_year`. |
+| `start_date` | `no` | `date / null` | `-` | Inclusive `YYYY-MM-DD`. |
+| `end_date` | `no` | `date / null` | `-` | Inclusive `YYYY-MM-DD`. |
+| `provider` | `yes` | `string` | `-` | Must be `bitget_data`. |
+
+Not paginated. Do not send `page` / `limit`. Empty THS results raise `EmptyDataError`.
+
+**bitget_data** response:
+
+| Field | Type | Notes |
+|---|---|---|
+| `symbol` | `string / null` | From `sec_code`. |
+| `period_ending` | `date / null` | From `ed`. |
+| `fiscal_year` | `integer / string / null` | Fiscal year. |
+| `name` | `string / null` | From `org_name`. |
+| `listed_country_code` | `string / null` | 上市国家地区编码. |
+| `listed_country_name` | `string / null` | From `listed_country__name`. |
+| `report_type_code` | `string / null` | 报告类型编码. |
+| `report_type_name` | `string / null` | 报告类型名称. |
+| `org_id` | `string / null` | 机构 id. |
+| `perf_briefing_fore_dsclsr_date` | `date / null` | 业绩简报预计披露日期. |
+| `perf_brief_dsclsr_date` | `date / null` | 业绩简报披露日期. |
+| `perf_report_dsclsr_date` | `date / null` | 业绩报告披露日期. |
+| `perf_report_fore_dsclsr_date` | `date / null` | 业绩报告预计披露日期. |
+| `is_trading_time` | `string / null` | 盘前/盘后. |
+
+---
 
 ### `equity.calendar.dividend`
 
@@ -2115,7 +2170,7 @@ Summary: Cash Growth
 ### `equity.fundamental.dividends`
 
 ```python
-data.equity.fundamental.dividends(symbol=..., start_time=None, end_time=None, limit=None)
+data.equity.fundamental.dividends(symbol="AAPL", start_date=None, end_date=None, event_type=None, provider="bitget_data")
 ```
 
 Summary: Dividends
@@ -2127,9 +2182,45 @@ Summary: Dividends
 | Path | `/inner/v1/agent-data/equity/fundamental/dividends` |
 | SDK | `supported` |
 | Host | `supported` |
-| Notes | - |
+| Notes | Supports `provider="bitget_data"` (THS US dividend and split). Use only the **bitget_data provider** query/response tables; ignore other-provider params/fields. |
 
-#### Query parameters
+**bitget_data** provider:
+
+| Param | Required | Type | Default | Notes |
+|---|---|---|---|---|
+| `symbol` | `yes` | `string` | `-` | Single US ticker. Required for THS. |
+| `start_date` | `no` | `date / null` | `-` | Inclusive `YYYY-MM-DD`, filtered on `ex_dividend_date`. `start_time` is coerced to `start_date`. |
+| `end_date` | `no` | `date / null` | `-` | Inclusive `YYYY-MM-DD`, filtered on `ex_dividend_date`. `end_time` is coerced to `end_date`. |
+| `event_type` | `no` | `string / null` | `-` | enum: `现金分红`, `股票拆分`, `股票分红`. Omit to return all types. Sent upstream as `type`. |
+| `provider` | `yes` | `string` | `-` | Must be `bitget_data`. |
+
+Not paginated. Rows without a usable `exright_date` are dropped. Empty results raise `EmptyDataError`.
+
+**bitget_data** response:
+
+| Field | Type | Notes |
+|---|---|---|
+| `symbol` | `string / null` | From `sec_code`. |
+| `ex_dividend_date` | `date` | From `exright_date`. Required after filtering. |
+| `amount` | `number / null` | From `dividend_ps` (现金分红 per share). |
+| `currency` | `string / null` | From `currency_code`. |
+| `declaration_date` | `date / null` | From `announcement_date`. |
+| `record_date` | `date / null` | 股权登记日. |
+| `payment_date` | `date / null` | From `dividend_date`. |
+| `sec_id` | `string / null` | 证券 id. |
+| `event_type` | `string / null` | From `type`: `现金分红` / `股票拆分` / `股票分红`. |
+| `is_special_dividend` | `string / null` | `0` 否, `1` 是. |
+| `stock_dividend_ps` | `number / null` | 每股股票分红（股）. |
+| `currency_name` | `string / null` | 货币名称. |
+| `split_valid_date` | `date / null` | 拆分生效日期. |
+| `split_numerator` | `string / null` | 拆分分子. |
+| `split_denominator` | `string / null` | 拆分分母. |
+| `third_party_dividend_ps` | `number / null` | 每股第三方证券分红. |
+| `third_party_id` | `string / null` | 第三方证券 id. |
+
+---
+
+#### Query parameters (other providers)
 
 | Param | Required | Type | Default | Notes |
 |---|---|---|---|---|
@@ -2138,7 +2229,7 @@ Summary: Dividends
 | `end_time` | `no` | `integer | null` | `-` | End time of the data as a Unix timestamp in milliseconds. Takes priority over end_date when both are provided. |
 | `limit` | `no` | `integer | null` | `-` | Return N most recent payments.; The number of data entries to return. |
 
-#### Response fields
+#### Response fields (other providers)
 
 | Field | Type | Notes |
 |---|---|---|

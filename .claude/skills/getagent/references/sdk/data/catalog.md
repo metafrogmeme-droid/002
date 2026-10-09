@@ -19,9 +19,9 @@ Playbook creator source tree.
 | `commodity` | [commodity.md](commodity.md) | 7 |
 | `crypto` | [crypto.md](crypto.md) | 111 |
 | `currency` | [currency.md](currency.md) | 4 |
-| `derivatives` | [derivatives.md](derivatives.md) | 8 |
+| `derivatives` | [derivatives.md](derivatives.md) | 20 |
 | `economy` | [economy.md](economy.md) | 42 |
-| `equity` | [equity.md](equity.md) | 74 |
+| `equity` | [equity.md](equity.md) | 75 |
 | `etf` | [etf.md](etf.md) | 12 |
 | `famafrench` | [famafrench.md](famafrench.md) | 6 |
 | `fixedincome` | [fixedincome.md](fixedincome.md) | 25 |

@@ -4,6 +4,34 @@ Use this file when an agent needs detailed signatures and parameter
 rules for one DataSDK domain. All generated `getagent.data` endpoints
 are callable through the DataSDK wrapper.
 
+US listed-options research uses two providers. Do not mix them, and do
+not treat OCC option symbols as Bitget tradable pairs.
+
+OpenAPI `operationId` values are flattened snake_case (for example
+`derivatives_options_volatility_summaries`). That string is **not** an
+HTTP path and is **not** the DataSDK name. Use the dotted Endpoint ID
+and the nested Path below, matching the current 3-level classification:
+
+- HTTP: `/inner/v1/agent-data/derivatives/options/volatility/summaries`
+- SDK: `data.derivatives.options.volatility.summaries(...)`
+- Same pattern for `marketdata/*` (`derivatives_options_marketdata_cbbo`
+  → `/derivatives/options/marketdata/cbbo`).
+
+There is no route `/derivatives/derivatives_options_volatility_summaries`.
+
+Selector rules (do not mix `orats` and `databento` on the same call):
+
+| Endpoints | Provider | What to pass |
+|---|---|---|
+| `options.volatility.*`, `options.chains` | `orats` | Exactly one of `symbol` or `symbols` (max 10). No OCC contract. |
+| `options.marketdata.definitions`, `statistics`, `status` | `databento` | Exactly one of `symbol`, `symbols` (max 10), or `contract_symbols`. Underlying-only is valid. |
+| `options.marketdata.cbbo`, `trades`, `tcbbo`, `ohlcv` | `databento` | **Both** `symbol` and `contract_symbols` (max 10, same underlying). Do not pass `symbols`. |
+
+For L1 (`cbbo` / `trades` / `tcbbo` / `ohlcv`): copy `contract_symbol` from a `definitions` row. Do not hand-build OSI strings (root padding and strike width are easy to get wrong). If the user already pasted a raw OCC symbol, pass it unchanged. Explicit `start`/`end` must not exceed 1 hour; L1 history must stay within the last 12 months.
+
+`derivatives.options.surface` is a chain-derived chart helper (POST body),
+not the ORATS `iv_surface` feed.
+
 ## Contents
 - [`derivatives.futures.curve`](#derivativesfuturescurve)
 - [`derivatives.futures.historical`](#derivativesfutureshistorical)
@@ -13,6 +41,18 @@ are callable through the DataSDK wrapper.
 - [`derivatives.options.snapshots`](#derivativesoptionssnapshots)
 - [`derivatives.options.surface`](#derivativesoptionssurface)
 - [`derivatives.options.unusual`](#derivativesoptionsunusual)
+- [`derivatives.options.volatility.iv_surface`](#derivativesoptionsvolatilityiv-surface)
+- [`derivatives.options.volatility.summaries`](#derivativesoptionsvolatilitysummaries)
+- [`derivatives.options.volatility.cores`](#derivativesoptionsvolatilitycores)
+- [`derivatives.options.volatility.historical_volatility`](#derivativesoptionsvolatilityhistorical-volatility)
+- [`derivatives.options.volatility.iv_rank`](#derivativesoptionsvolatilityiv-rank)
+- [`derivatives.options.marketdata.definitions`](#derivativesoptionsmarketdatadefinitions)
+- [`derivatives.options.marketdata.cbbo`](#derivativesoptionsmarketdatacbbo)
+- [`derivatives.options.marketdata.statistics`](#derivativesoptionsmarketdatastatistics)
+- [`derivatives.options.marketdata.trades`](#derivativesoptionsmarketdatatrades)
+- [`derivatives.options.marketdata.tcbbo`](#derivativesoptionsmarketdatatcbbo)
+- [`derivatives.options.marketdata.ohlcv`](#derivativesoptionsmarketdataohlcv)
+- [`derivatives.options.marketdata.status`](#derivativesoptionsmarketdatastatus)
 
 ## Endpoint reference
 
@@ -378,3 +418,547 @@ Summary: Unusual
 | `underlying_price_at_execution` | `number` | Price of the underlying security at execution of trade. |
 | `total_size` | `integer` | The total number of contracts involved in a single transaction. |
 | `total_value` | `integer` | The aggregated value of all option contract premiums included in the trade. |
+
+---
+
+### `derivatives.options.volatility.iv_surface`
+
+```python
+data.derivatives.options.volatility.iv_surface(symbol="AAPL", date=None, interval="1d", provider="orats")
+```
+
+Summary: Implied-volatility surface
+
+| Field | Value |
+|---|---|
+| Endpoint ID | `derivatives.options.volatility.iv_surface` |
+| HTTP | `GET` |
+| Path | `/inner/v1/agent-data/derivatives/options/volatility/iv_surface` |
+| SDK | `supported` |
+| Host | `supported` |
+| Notes | ORATS only (`provider="orats"`). Not the POST `derivatives.options.surface` chart helper. `interval=1d` is EOD; `interval=1m` is a one-minute snapshot (date-only values default to 09:31 ET). |
+
+**orats** provider:
+
+| Param | Required | Type | Default | Notes |
+|---|---|---|---|---|
+| `symbol` | `no` | `string / null` | `-` | Single underlying ticker. Provide exactly one of `symbol` or `symbols`. |
+| `symbols` | `no` | `string / null` | `-` | Comma-delimited underlyings, max 10. |
+| `date` | `no` | `date / datetime / null` | `-` | Trade date or timestamp. |
+| `interval` | `no` | `string` | `1d` | enum: `1d`, `1m`. |
+| `fields` | `no` | `string / null` | `-` | Comma-delimited ORATS fields. |
+| `provider` | `yes` | `string` | `-` | Must be `orats`. |
+
+**orats** response:
+
+| Field | Type | Notes |
+|---|---|---|
+| `symbol` | `string` | Underlying ticker. |
+| `date` | `date` | Trade date. |
+| `expiration` | `date` | Option expiration. |
+| `stock_price` | `number / null` | Underlying price. |
+| `spot_price` | `number / null` | Index spot, when returned. |
+| `risk_free_rate` | `number / null` | Risk-free rate. |
+| `yield_rate` | `number / null` | Dividend yield. |
+| `confidence` | `number / null` | Surface fit confidence. |
+| `atm_iv` | `number / null` | At-the-money IV. |
+| `slope` | `number / null` | Skew slope. |
+| `derivative` | `number / null` | Skew derivative. |
+| `fit` | `number / null` | Surface fit error. |
+| `calendar_volatility` | `number / null` | Smoothed calendar vol. |
+| `unadjusted_volatility` | `number / null` | Vol before earnings adjustment. |
+| `earnings_effect` | `number / null` | Implied earnings effect. |
+| `dte` | `integer / null` | Days to expiration. |
+| `vol_0` … `vol_100` | `number / null` | IV nodes every 5 delta points. |
+| `snapshot_at` | `datetime / null` | One-minute snapshot timestamp. |
+| `snapshot_est_time` | `integer / null` | Eastern snapshot time as HHMM. |
+
+---
+
+### `derivatives.options.volatility.summaries`
+
+```python
+data.derivatives.options.volatility.summaries(symbol="AAPL", date=None, interval="1d", provider="orats")
+```
+
+Summary: Underlying-level volatility summaries
+
+| Field | Value |
+|---|---|
+| Endpoint ID | `derivatives.options.volatility.summaries` |
+| HTTP | `GET` |
+| Path | `/inner/v1/agent-data/derivatives/options/volatility/summaries` |
+| SDK | `supported` |
+| Host | `supported` |
+| Notes | ORATS only. Same `symbol`/`symbols` and `interval=1d|1m` contract as `iv_surface`. |
+
+**orats** provider:
+
+| Param | Required | Type | Default | Notes |
+|---|---|---|---|---|
+| `symbol` | `no` | `string / null` | `-` | Single underlying. Exactly one of `symbol` or `symbols`. |
+| `symbols` | `no` | `string / null` | `-` | Comma-delimited underlyings, max 10. |
+| `date` | `no` | `date / datetime / null` | `-` | Trade date or timestamp. |
+| `interval` | `no` | `string` | `1d` | enum: `1d`, `1m`. |
+| `fields` | `no` | `string / null` | `-` | Comma-delimited ORATS fields. |
+| `provider` | `yes` | `string` | `-` | Must be `orats`. |
+
+**orats** response:
+
+| Field | Type | Notes |
+|---|---|---|
+| `symbol` | `string` | Underlying ticker. |
+| `date` | `date` | Trade date. |
+| `stock_price` | `number / null` | Underlying price. |
+| `confidence` | `number / null` | Fit confidence. |
+| `implied_earnings_move` | `number / null` | Move implied by the earnings effect. |
+| `implied_move` | `number / null` | Implied move. |
+| `earnings_effect` | `number / null` | Earnings effect. |
+| `iv_10d` / `iv_20d` / `iv_30d` / `iv_60d` / `iv_90d` / `iv_6m` / `iv_1y` | `number / null` | Term IVs. |
+| `ex_earnings_iv_*` | `number / null` | Same tenors excluding earnings. |
+| `skew` | `number / null` | Skew. |
+| `contango` | `number / null` | Contango. |
+| `snapshot_at` | `datetime / null` | One-minute snapshot timestamp. |
+| `snapshot_est_time` | `integer / null` | Eastern snapshot time as HHMM. |
+
+---
+
+### `derivatives.options.volatility.cores`
+
+```python
+data.derivatives.options.volatility.cores(symbol="AAPL", date=None, provider="orats")
+```
+
+Summary: Daily underlying-level core option metrics
+
+| Field | Value |
+|---|---|
+| Endpoint ID | `derivatives.options.volatility.cores` |
+| HTTP | `GET` |
+| Path | `/inner/v1/agent-data/derivatives/options/volatility/cores` |
+| SDK | `supported` |
+| Host | `supported` |
+| Notes | ORATS only. Daily `hist/cores`. Extra ORATS columns may still appear. |
+
+**orats** provider:
+
+| Param | Required | Type | Default | Notes |
+|---|---|---|---|---|
+| `symbol` | `no` | `string / null` | `-` | Single underlying. Exactly one of `symbol` or `symbols`. |
+| `symbols` | `no` | `string / null` | `-` | Comma-delimited underlyings, max 10. |
+| `date` | `no` | `date / null` | `-` | Single trade date. |
+| `fields` | `no` | `string / null` | `-` | Comma-delimited ORATS fields. |
+| `provider` | `yes` | `string` | `-` | Must be `orats`. |
+
+**orats** response:
+
+| Field | Type | Notes |
+|---|---|---|
+| `symbol` | `string` | Underlying ticker. |
+| `date` | `date` | Trade date. |
+| `prior_close` | `number / null` | Prior close. |
+| `stock_price` | `number / null` | ATM / stock price. |
+| `market_cap` | `number / null` | Market cap. |
+| `call_volume` / `put_volume` | `integer / null` | Call / put volume. |
+| `call_open_interest` / `put_open_interest` / `options_open_interest` | `integer / null` | Open interest. |
+| `forecast_volatility_20d` | `number / null` | 20d forecast vol. |
+| `forecast_iv_20d` | `number / null` | 20d forecast IV. |
+| `ex_earnings_iv_20d` | `number / null` | 20d IV excluding earnings. |
+| `historical_volatility_20d` | `number / null` | 20d HV. |
+| `implied_volatility_30d` | `number / null` | 30d IV. |
+| `slope` / `contango` / `volatility_of_volatility` | `number / null` | Skew / term / vol-of-vol. |
+| `implied_move` | `number / null` | Implied straddle-style earnings move (decimal). |
+| `implied_earnings_move` | `number / null` | Implied earnings move. |
+| `sector_name` | `string / null` | Sector. |
+
+---
+
+### `derivatives.options.volatility.historical_volatility`
+
+```python
+data.derivatives.options.volatility.historical_volatility(symbol="AAPL", date=None, provider="orats")
+```
+
+Summary: Historical volatility across lookback windows
+
+| Field | Value |
+|---|---|
+| Endpoint ID | `derivatives.options.volatility.historical_volatility` |
+| HTTP | `GET` |
+| Path | `/inner/v1/agent-data/derivatives/options/volatility/historical_volatility` |
+| SDK | `supported` |
+| Host | `supported` |
+| Notes | ORATS only. Same `symbol`/`symbols`/`date` contract as `cores`. |
+
+**orats** provider:
+
+| Param | Required | Type | Default | Notes |
+|---|---|---|---|---|
+| `symbol` | `no` | `string / null` | `-` | Single underlying. Exactly one of `symbol` or `symbols`. |
+| `symbols` | `no` | `string / null` | `-` | Comma-delimited underlyings, max 10. |
+| `date` | `no` | `date / null` | `-` | Single trade date. |
+| `provider` | `yes` | `string` | `-` | Must be `orats`. |
+
+**orats** response:
+
+| Field | Type | Notes |
+|---|---|---|
+| `symbol` | `string` | Underlying ticker. |
+| `date` | `date` | Trade date. |
+| `or_hv_{1,5,10,20,30,60,90,100,120,252,500,1000}d` | `number / null` | ORATS historical vol windows. |
+| `close_hv_{5..1000}d` | `number / null` | Close-to-close HV windows. |
+| `or_hv_ex_earnings_*` / `close_hv_ex_earnings_*` | `number / null` | Same windows excluding earnings. |
+
+---
+
+### `derivatives.options.volatility.iv_rank`
+
+```python
+data.derivatives.options.volatility.iv_rank(symbol="AAPL", date=None, provider="orats")
+```
+
+Summary: Implied-volatility rank and percentile
+
+| Field | Value |
+|---|---|
+| Endpoint ID | `derivatives.options.volatility.iv_rank` |
+| HTTP | `GET` |
+| Path | `/inner/v1/agent-data/derivatives/options/volatility/iv_rank` |
+| SDK | `supported` |
+| Host | `supported` |
+| Notes | ORATS only. |
+
+**orats** provider:
+
+| Param | Required | Type | Default | Notes |
+|---|---|---|---|---|
+| `symbol` | `no` | `string / null` | `-` | Single underlying. Exactly one of `symbol` or `symbols`. |
+| `symbols` | `no` | `string / null` | `-` | Comma-delimited underlyings, max 10. |
+| `date` | `no` | `date / null` | `-` | Single trade date. |
+| `provider` | `yes` | `string` | `-` | Must be `orats`. |
+
+**orats** response:
+
+| Field | Type | Notes |
+|---|---|---|
+| `symbol` | `string` | Underlying ticker. |
+| `date` | `date` | Trade date. |
+| `implied_volatility` | `number / null` | Current IV. |
+| `iv_rank_1m` / `iv_percentile_1m` | `number / null` | 1-month rank / percentile. |
+| `iv_rank_1y` / `iv_percentile_1y` | `number / null` | 1-year rank / percentile. |
+
+---
+
+### `derivatives.options.marketdata.definitions`
+
+```python
+data.derivatives.options.marketdata.definitions(symbol="AAPL", provider="databento")
+```
+
+Summary: Point-in-time instrument definitions
+
+| Field | Value |
+|---|---|
+| Endpoint ID | `derivatives.options.marketdata.definitions` |
+| HTTP | `GET` |
+| Path | `/inner/v1/agent-data/derivatives/options/marketdata/definitions` |
+| SDK | `supported` |
+| Host | `supported` |
+| Notes | Databento OPRA only (`provider="databento"`). Provide exactly one of `symbol`, `symbols`, or `contract_symbols`. |
+
+**databento** provider:
+
+| Param | Required | Type | Default | Notes |
+|---|---|---|---|---|
+| `symbol` | `no` | `string / null` | `-` | Single underlying ticker. |
+| `symbols` | `no` | `string / null` | `-` | Comma-delimited underlyings, max 10. |
+| `contract_symbols` | `no` | `string / null` | `-` | Comma-delimited raw OCC contract symbols. |
+| `start` | `no` | `date / datetime / null` | `-` | Inclusive start. |
+| `end` | `no` | `date / datetime / null` | `-` | Exclusive end. Must be after `start`. |
+| `limit` | `no` | `integer / null` | `-` | Maximum records. |
+| `provider` | `yes` | `string` | `-` | Must be `databento`. |
+
+**databento** response:
+
+| Field | Type | Notes |
+|---|---|---|
+| `received_at` | `datetime` | Definition receive timestamp. |
+| `event_at` | `datetime / null` | Definition event timestamp. |
+| `instrument_id` | `integer` | Databento numeric instrument ID. |
+| `contract_symbol` | `string` | Raw OCC option symbol. |
+| `underlying_symbol` | `string / null` | Underlying ticker. |
+| `option_type` | `string / null` | Call / put. |
+| `expiration` | `datetime / null` | Expiration. |
+| `activation` | `datetime / null` | Activation. |
+| `strike` | `number / null` | Strike. |
+| `contract_multiplier` | `integer / null` | Multiplier. |
+| `min_price_increment` | `number / null` | Tick size. |
+| `currency` | `string / null` | Currency. |
+| `exchange` | `string / null` | Exchange. |
+| `security_type` | `string / null` | Security type. |
+| `update_action` | `string / null` | Update action. |
+
+---
+
+### `derivatives.options.marketdata.cbbo`
+
+```python
+data.derivatives.options.marketdata.cbbo(symbol="AAPL", contract_symbols="AAPL  250919C00200000", interval="1s", provider="databento")
+```
+
+Summary: Consolidated best bid and offer
+
+| Field | Value |
+|---|---|
+| Endpoint ID | `derivatives.options.marketdata.cbbo` |
+| HTTP | `GET` |
+| Path | `/inner/v1/agent-data/derivatives/options/marketdata/cbbo` |
+| SDK | `supported` |
+| Host | `supported` |
+| Notes | Databento OPRA L1. Requires `symbol` + `contract_symbols` (max 10, same underlying). Do not pass `symbols`. Explicit `start`/`end` must be within 1 hour and the last 12 months. |
+
+**databento** provider:
+
+| Param | Required | Type | Default | Notes |
+|---|---|---|---|---|
+| `symbol` | `yes` | `string` | `-` | Single underlying. |
+| `contract_symbols` | `yes` | `string` | `-` | Comma-delimited OCC contracts, max 10. |
+| `interval` | `no` | `string` | `1s` | enum: `1s`, `1m` (`cbbo-1s` / `cbbo-1m`). |
+| `start` | `no` | `date / datetime / null` | `-` | Inclusive start. Required when `end` is set. |
+| `end` | `no` | `date / datetime / null` | `-` | Exclusive end. |
+| `limit` | `no` | `integer / null` | `10000` | Max records. |
+| `provider` | `yes` | `string` | `-` | Must be `databento`. |
+
+**databento** response:
+
+| Field | Type | Notes |
+|---|---|---|
+| `received_at` | `datetime` | End of the sample interval. |
+| `event_at` | `datetime / null` | Last-trade timestamp. |
+| `instrument_id` | `integer` | Databento instrument ID. |
+| `contract_symbol` | `string` | OCC symbol. |
+| `underlying_symbol` | `string / null` | Underlying. |
+| `last_price` / `last_size` / `trade_side` | `number / integer / string / null` | Last sale. |
+| `bid` / `ask` / `bid_size` / `ask_size` | `number / integer / null` | NBBO. |
+| `interval` | `string` | Sample interval. |
+
+---
+
+### `derivatives.options.marketdata.statistics`
+
+```python
+data.derivatives.options.marketdata.statistics(symbol="AAPL", provider="databento")
+```
+
+Summary: Official venue statistics
+
+| Field | Value |
+|---|---|
+| Endpoint ID | `derivatives.options.marketdata.statistics` |
+| HTTP | `GET` |
+| Path | `/inner/v1/agent-data/derivatives/options/marketdata/statistics` |
+| SDK | `supported` |
+| Host | `supported` |
+| Notes | Databento OPRA. Same selector contract as `definitions` (exactly one of `symbol` / `symbols` / `contract_symbols`). Open interest and session prices. |
+
+**databento** provider:
+
+| Param | Required | Type | Default | Notes |
+|---|---|---|---|---|
+| `symbol` | `no` | `string / null` | `-` | Single underlying. |
+| `symbols` | `no` | `string / null` | `-` | Comma-delimited underlyings, max 10. |
+| `contract_symbols` | `no` | `string / null` | `-` | Comma-delimited OCC contracts. |
+| `start` | `no` | `date / datetime / null` | `-` | Inclusive start. |
+| `end` | `no` | `date / datetime / null` | `-` | Exclusive end. |
+| `limit` | `no` | `integer / null` | `-` | Maximum records. |
+| `provider` | `yes` | `string` | `-` | Must be `databento`. |
+
+**databento** response:
+
+| Field | Type | Notes |
+|---|---|---|
+| `received_at` | `datetime` | Statistic receive timestamp. |
+| `event_at` | `datetime / null` | Event timestamp. |
+| `instrument_id` | `integer` | Databento instrument ID. |
+| `contract_symbol` | `string / null` | OCC symbol. |
+| `underlying_symbol` | `string / null` | Underlying. |
+| `statistic_type` | `integer / null` | Databento `stat_type` code. |
+| `statistic_name` | `string / null` | Human-readable statistic type. |
+| `price` | `number / null` | Statistic price. |
+| `quantity` | `integer / null` | Statistic quantity (e.g. open interest). |
+| `reference_at` | `datetime / null` | Reference timestamp. |
+
+---
+
+### `derivatives.options.marketdata.trades`
+
+```python
+data.derivatives.options.marketdata.trades(symbol="AAPL", contract_symbols="AAPL  250919C00200000", provider="databento")
+```
+
+Summary: Last-sale trades
+
+| Field | Value |
+|---|---|
+| Endpoint ID | `derivatives.options.marketdata.trades` |
+| HTTP | `GET` |
+| Path | `/inner/v1/agent-data/derivatives/options/marketdata/trades` |
+| SDK | `supported` |
+| Host | `supported` |
+| Notes | Databento OPRA L1. Same `symbol` + `contract_symbols` and 1-hour / 12-month window as `cbbo`. |
+
+**databento** provider:
+
+| Param | Required | Type | Default | Notes |
+|---|---|---|---|---|
+| `symbol` | `yes` | `string` | `-` | Single underlying. |
+| `contract_symbols` | `yes` | `string` | `-` | Comma-delimited OCC contracts, max 10. |
+| `start` | `no` | `date / datetime / null` | `-` | Inclusive start. Required when `end` is set. |
+| `end` | `no` | `date / datetime / null` | `-` | Exclusive end. |
+| `limit` | `no` | `integer / null` | `10000` | Max records. |
+| `provider` | `yes` | `string` | `-` | Must be `databento`. |
+
+**databento** response:
+
+| Field | Type | Notes |
+|---|---|---|
+| `received_at` | `datetime` | Capture-server receive timestamp. |
+| `event_at` | `datetime / null` | Matching-engine timestamp. |
+| `instrument_id` | `integer` | Databento instrument ID. |
+| `contract_symbol` | `string / null` | OCC symbol. |
+| `underlying_symbol` | `string / null` | Underlying. |
+| `price` | `number / null` | Trade price. |
+| `size` | `integer / null` | Trade size. |
+| `side` | `string / null` | Aggressor side. |
+| `action` | `string / null` | Trade action. |
+
+---
+
+### `derivatives.options.marketdata.tcbbo`
+
+```python
+data.derivatives.options.marketdata.tcbbo(symbol="AAPL", contract_symbols="AAPL  250919C00200000", provider="databento")
+```
+
+Summary: Trades with NBBO immediately before each trade
+
+| Field | Value |
+|---|---|
+| Endpoint ID | `derivatives.options.marketdata.tcbbo` |
+| HTTP | `GET` |
+| Path | `/inner/v1/agent-data/derivatives/options/marketdata/tcbbo` |
+| SDK | `supported` |
+| Host | `supported` |
+| Notes | Databento OPRA L1. Same selector and window contract as `trades`. |
+
+**databento** provider:
+
+| Param | Required | Type | Default | Notes |
+|---|---|---|---|---|
+| `symbol` | `yes` | `string` | `-` | Single underlying. |
+| `contract_symbols` | `yes` | `string` | `-` | Comma-delimited OCC contracts, max 10. |
+| `start` | `no` | `date / datetime / null` | `-` | Inclusive start. Required when `end` is set. |
+| `end` | `no` | `date / datetime / null` | `-` | Exclusive end. |
+| `limit` | `no` | `integer / null` | `10000` | Max records. |
+| `provider` | `yes` | `string` | `-` | Must be `databento`. |
+
+**databento** response:
+
+| Field | Type | Notes |
+|---|---|---|
+| `received_at` | `datetime` | Capture-server receive timestamp. |
+| `event_at` | `datetime / null` | Event timestamp. |
+| `instrument_id` | `integer` | Databento instrument ID. |
+| `contract_symbol` | `string / null` | OCC symbol. |
+| `price` / `size` / `side` / `action` | mixed | Trade print. |
+| `bid` / `ask` / `bid_size` / `ask_size` | `number / integer / null` | NBBO immediately before the trade. |
+
+---
+
+### `derivatives.options.marketdata.ohlcv`
+
+```python
+data.derivatives.options.marketdata.ohlcv(symbol="AAPL", contract_symbols="AAPL  250919C00200000", interval="1s", provider="databento")
+```
+
+Summary: One-second OHLCV bars
+
+| Field | Value |
+|---|---|
+| Endpoint ID | `derivatives.options.marketdata.ohlcv` |
+| HTTP | `GET` |
+| Path | `/inner/v1/agent-data/derivatives/options/marketdata/ohlcv` |
+| SDK | `supported` |
+| Host | `supported` |
+| Notes | Databento OPRA. Requires `symbol` + `contract_symbols`. Only `interval=1s` is collected. Explicit `start`/`end` must not exceed 1 hour. |
+
+**databento** provider:
+
+| Param | Required | Type | Default | Notes |
+|---|---|---|---|---|
+| `symbol` | `yes` | `string` | `-` | Single underlying. |
+| `contract_symbols` | `yes` | `string` | `-` | Comma-delimited OCC contracts, max 10. |
+| `interval` | `no` | `string` | `1s` | Only `1s`. |
+| `start` | `no` | `date / datetime / null` | `-` | Inclusive start. Required when `end` is set. |
+| `end` | `no` | `date / datetime / null` | `-` | Exclusive end. |
+| `limit` | `no` | `integer / null` | `10000` | Max records. |
+| `provider` | `yes` | `string` | `-` | Must be `databento`. |
+
+**databento** response:
+
+| Field | Type | Notes |
+|---|---|---|
+| `event_at` | `datetime / null` | Inclusive start of the bar. |
+| `instrument_id` | `integer` | Databento instrument ID. |
+| `contract_symbol` | `string / null` | OCC symbol. |
+| `underlying_symbol` | `string / null` | Underlying. |
+| `open` / `high` / `low` / `close` | `number / null` | Bar OHLC. |
+| `volume` | `integer / null` | Bar volume. |
+| `interval` | `string` | Always `1s`. |
+
+---
+
+### `derivatives.options.marketdata.status`
+
+```python
+data.derivatives.options.marketdata.status(symbol="AAPL", dte_min=0, dte_max=21, provider="databento")
+```
+
+Summary: Trading-status events
+
+| Field | Value |
+|---|---|
+| Endpoint ID | `derivatives.options.marketdata.status` |
+| HTTP | `GET` |
+| Path | `/inner/v1/agent-data/derivatives/options/marketdata/status` |
+| SDK | `supported` |
+| Host | `supported` |
+| Notes | Databento OPRA. Same selector contract as `definitions`. `dte_min` must be `<= dte_max`. |
+
+**databento** provider:
+
+| Param | Required | Type | Default | Notes |
+|---|---|---|---|---|
+| `symbol` | `no` | `string / null` | `-` | Single underlying. |
+| `symbols` | `no` | `string / null` | `-` | Comma-delimited underlyings, max 10. |
+| `contract_symbols` | `no` | `string / null` | `-` | Comma-delimited OCC contracts. |
+| `start` | `no` | `date / datetime / null` | `-` | Inclusive start. |
+| `end` | `no` | `date / datetime / null` | `-` | Exclusive end. |
+| `limit` | `no` | `integer / null` | `10000` | Max records. |
+| `dte_min` | `no` | `integer / null` | `0` | Minimum days to expiration. |
+| `dte_max` | `no` | `integer / null` | `21` | Maximum days to expiration. |
+| `provider` | `yes` | `string` | `-` | Must be `databento`. |
+
+**databento** response:
+
+| Field | Type | Notes |
+|---|---|---|
+| `received_at` | `datetime` | Capture-server receive timestamp. |
+| `event_at` | `datetime / null` | Event timestamp. |
+| `instrument_id` | `integer` | Databento instrument ID. |
+| `contract_symbol` | `string / null` | OCC symbol. |
+| `underlying_symbol` | `string / null` | Underlying. |
+| `action` / `action_name` | `integer / string / null` | Status action. |
+| `reason` | `integer / null` | Status reason code. |
+| `trading_event` | `integer / null` | Trading event code. |
+| `is_trading` / `is_quoting` / `is_short_sell_restricted` | `string / null` | Status flags. |

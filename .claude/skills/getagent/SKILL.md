@@ -14,7 +14,7 @@ compatibility: >-
   access to the GetAgent Playbook control-plane API for upload/run/publish.
 metadata:
   author: getagent
-  version: v0.6.2
+  version: v0.6.4
 ---
 
 # GetAgent Playbook Creator
@@ -175,12 +175,21 @@ Rules that apply every time `getagent.data` is used in Playbook code.
   only when `bitget_data` does not cover the requested symbol or data type.
   State the fallback reason clearly in a code comment.
 - For THS-backed US-equity fundamentals, ownership, analyst estimates, ETF
-  data, and ETF fund flows, use the existing `equity.*` and `etf.*` endpoints
-  with `provider="bitget_data"`. Read the **bitget_data provider** query and
-  response tables in `references/sdk/data/equity.md` or `etf.md`. Do not copy
-  `period`, `fiscal_year`, `ttm`, `start_time`, `date`, or other-provider
-  field names. Public `symbol`/`limit`/`page` are correct; the platform maps
-  `symbol` to upstream `sec_code` and `limit` to `size`.
+  data, ETF fund flows, earnings-disclosure calendar (`equity.calendar`), and
+  dividend/split history (`equity.fundamental.dividends`), use the existing
+  `equity.*` and `etf.*` endpoints with `provider="bitget_data"`. Read the
+  **bitget_data provider** query and response tables in
+  `references/sdk/data/equity.md` or `etf.md`. Do not copy `period`,
+  `fiscal_year`, `ttm`, `start_time`, `date`, or other-provider field names
+  unless that field is listed in the **bitget_data** table (`equity.calendar`
+  does use `fiscal_year`). Public `symbol`/`limit`/`page` are correct; the
+  platform maps `symbol` to upstream `sec_code` and `limit` to `size`.
+- For US listed-options research, open `references/sdk/data/derivatives.md`
+  and follow its selector table. ORATS (`provider="orats"`) takes an
+  underlying ticker only. Databento L1 (`cbbo` / `trades` / `tcbbo` /
+  `ohlcv`) requires OCC `contract_symbols` copied from
+  `marketdata.definitions` — never invent an OCC string. Do not treat
+  option contracts as Bitget tradable pairs.
 - Never pass a `provider` value that is not listed in the endpoint's
   documented enum. If no provider is documented for an endpoint, omit the
   parameter entirely.
