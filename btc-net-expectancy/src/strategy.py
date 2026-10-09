@@ -19,15 +19,15 @@ class BtcNetExpectancyConfig(StrategyConfig):
     atr_period: int = 14
     atr_stop_multiple: str = "1.5"
     adx_period: int = 14
-    adx_min: str = "30"
-    breakout_period: int = 48
+    adx_min: str = "15"
+    adx_max: str = "35"
+    rsi_period: int = 14
+    rsi_recovery_level: str = "40"
     long_trend_period: int = 200
     trend_slope_hours: int = 24
     atr_percentile_lookback: int = 168
     atr_percentile_min: str = "30"
     atr_percentile_max: str = "75"
-    breakout_atr_buffer: str = "0.25"
-    close_location_min: str = "0.75"
     take_profit_r: str = "2"
     time_stop_hours: int = 8
     order_ttl_hours: int = 4
@@ -116,8 +116,8 @@ class BtcNetExpectancyStrategy(Strategy):
             return
 
         warmup = max(
-            self.cfg.breakout_period + 1,
             self.cfg.adx_period * 2 + 1,
+            self.cfg.rsi_period + 2,
             self.cfg.long_trend_period + self.cfg.trend_slope_hours,
             self.cfg.atr_percentile_lookback + self.cfg.atr_period,
             24,
@@ -130,7 +130,6 @@ class BtcNetExpectancyStrategy(Strategy):
             self._atr_history[-self.cfg.atr_percentile_lookback :],
             atr,
         )
-        prior_high = max(self._highs[-self.cfg.breakout_period - 1 : -1])
         trend_now = self._ema(self._closes[-self.cfg.long_trend_period :])
         trend_then = self._ema(
             self._closes[
@@ -141,16 +140,16 @@ class BtcNetExpectancyStrategy(Strategy):
         quote_volume_24h = sum(
             self._volumes[-24 + i] * self._closes[-24 + i] for i in range(24)
         )
-        breakout_strength = (close - prior_high) / atr
-        bar_range = high - low
-        close_location = (close - low) / bar_range if bar_range > 0 else 0.0
-        if breakout_strength < float(self.cfg.breakout_atr_buffer):
-            return
-        if close_location < float(self.cfg.close_location_min):
+        rsi_now = self._rsi(self._closes, self.cfg.rsi_period)
+        rsi_previous = self._rsi(self._closes[:-1], self.cfg.rsi_period)
+        recovery_level = float(self.cfg.rsi_recovery_level)
+        if not (rsi_previous < recovery_level <= rsi_now):
             return
         if close <= trend_now or trend_now <= trend_then:
             return
         if adx < float(self.cfg.adx_min):
+            return
+        if adx > float(self.cfg.adx_max):
             return
         if not (
             float(self.cfg.atr_percentile_min)
@@ -258,6 +257,21 @@ class BtcNetExpectancyStrategy(Strategy):
         for value in values[1:]:
             current = alpha * value + (1.0 - alpha) * current
         return current
+
+    @staticmethod
+    def _rsi(values: list[float], period: int) -> float:
+        if len(values) < period + 1:
+            return 50.0
+        changes = [
+            values[idx] - values[idx - 1]
+            for idx in range(len(values) - period, len(values))
+        ]
+        average_gain = sum(max(change, 0.0) for change in changes) / period
+        average_loss = sum(max(-change, 0.0) for change in changes) / period
+        if average_loss <= 0:
+            return 100.0
+        relative_strength = average_gain / average_loss
+        return 100.0 - 100.0 / (1.0 + relative_strength)
 
     @staticmethod
     def _percentile_rank(values: list[float], current: float) -> float:

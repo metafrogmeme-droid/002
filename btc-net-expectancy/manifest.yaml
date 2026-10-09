@@ -8,9 +8,9 @@ display_name_i18n:
   es: "Expectativa neta de BTC"
   ja: "BTCネット期待値"
   vi: "Kỳ vọng ròng BTC"
-description: "Long-only BTCUSDT perpetual trend entries with volatility, liquidity, funding, and fixed-risk controls."
+description: "Long-only BTCUSDT perpetual trend-pullback entries with volatility, liquidity, funding, and fixed-risk controls."
 description_i18n:
-  en: "Long-only BTCUSDT perpetual trend entries with volatility, liquidity, funding, and fixed-risk controls."
+  en: "Long-only BTCUSDT perpetual trend-pullback entries with volatility, liquidity, funding, and fixed-risk controls."
   zh: "仅做多 BTCUSDT 永续合约，采用趋势、波动率、流动性、资金费率和固定风险控制。"
   zh-tw: "僅做多 BTCUSDT 永續合約，採用趨勢、波動率、流動性、資金費率和固定風險控制。"
   es: "Entradas tendenciales solo largas en el perpetuo BTCUSDT con controles de volatilidad, liquidez, financiación y riesgo fijo."
@@ -19,13 +19,13 @@ description_i18n:
 long_description: |
   This Playbook aims to capture sustained upward trends in the BTC perpetual market while measuring success from net trading outcomes rather than displayed return alone. It is deliberately long-only and treats capital preservation as part of the thesis. The strategy avoids participation when market data, liquidity, account ownership, or funding conditions cannot be verified, so an uncertain input produces no trade instead of an optimistic assumption.
 
-  It enters long only when directional strength, an upward price breakout, and an acceptable volatility regime agree. A live liquidity check must also confirm a narrow spread and sufficient turnover. The funding check rejects entries near settlement or when the expected holding cost consumes too much of the planned risk. Entry orders are passive limits, and stale unfilled orders are cancelled rather than chased.
+  It enters long only when momentum recovers from a pullback inside a rising long-term trend and an acceptable volatility regime. A live liquidity check must also confirm a narrow spread and sufficient turnover. The funding check rejects entries near settlement or when the expected holding cost consumes too much of the planned risk. Entry orders are passive limits, and stale unfilled orders are cancelled rather than chased.
 
   Every accepted entry carries a volatility-scaled stop and a fixed reward target. Position size is determined from the loss allowed at the stop, then constrained by exchange quantity rules and the configured leverage cap. The Playbook closes on the protective stop, the take-profit target, or a trend time limit. It never opens a short and never modifies a position that it cannot attribute to itself.
 
   Subscriber-tunable parameters control leverage, margin budget, per-trade risk, the liquidity floor, and the maximum spread. Raising leverage increases capital efficiency but also liquidation sensitivity; it does not increase the fixed stop loss budget. Raising the liquidity floor or tightening the spread cap makes entries rarer and potentially cleaner. Increasing per-trade risk scales losses and gains in cash terms, while margin budget sets the strategy return denominator and capacity ceiling.
 
-  The main risk is repeated false breakouts during choppy or abruptly reversing markets. Gaps, exchange outages, delayed data, fee-tier differences, unexpected funding, and limit-order non-fills can make live results worse than historical evidence. The strategy may underperform when trends are weak or volatility changes faster than hourly indicators react. Backtests cannot guarantee positive live expectancy, and the Playbook must be stopped when its declared loss controls or forward failure criteria are reached.
+  The main risk is repeated failed recoveries during choppy or abruptly reversing markets. Gaps, exchange outages, delayed data, fee-tier differences, unexpected funding, and limit-order non-fills can make live results worse than historical evidence. The strategy may underperform when trends are weak or volatility changes faster than hourly indicators react. Backtests cannot guarantee positive live expectancy, and the Playbook must be stopped when its declared loss controls or forward failure criteria are reached.
 market_type: contract
 trading_symbols: ["BTCUSDT"]
 output_kind: trade_strategy
@@ -47,15 +47,15 @@ strategy_config:
   atr_period: 14
   atr_stop_multiple: "1.5"
   adx_period: 14
-  adx_min: "30"
-  breakout_period: 48
+  adx_min: "15"
+  adx_max: "35"
+  rsi_period: 14
+  rsi_recovery_level: "40"
   long_trend_period: 200
   trend_slope_hours: 24
   atr_percentile_lookback: 168
   atr_percentile_min: "30"
   atr_percentile_max: "75"
-  breakout_atr_buffer: "0.25"
-  close_location_min: "0.75"
   take_profit_r: "2"
   time_stop_hours: 8
   max_spread_bps: "5"

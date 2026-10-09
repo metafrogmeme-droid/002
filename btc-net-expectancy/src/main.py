@@ -417,6 +417,21 @@ def _adx(rows: list[dict[str, Any]], period: int) -> Decimal:
     return sum(dx_values, Decimal("0")) / Decimal(len(dx_values)) if dx_values else Decimal("0")
 
 
+def _rsi(values: list[Decimal], period: int) -> Decimal:
+    if len(values) < period + 1:
+        return Decimal("50")
+    changes = [
+        values[idx] - values[idx - 1]
+        for idx in range(len(values) - period, len(values))
+    ]
+    average_gain = sum((max(change, Decimal("0")) for change in changes), Decimal("0")) / Decimal(period)
+    average_loss = sum((max(-change, Decimal("0")) for change in changes), Decimal("0")) / Decimal(period)
+    if average_loss <= 0:
+        return Decimal("100")
+    relative_strength = average_gain / average_loss
+    return Decimal("100") - Decimal("100") / (Decimal("1") + relative_strength)
+
+
 def _emit_hold(code: str, metrics: dict[str, Any], state: dict[str, Any]) -> None:
     runtime.emit_signal_or_follow(
         action="hold",
@@ -500,7 +515,7 @@ def _execute_entry(
             "filled_price": "PENDING",
             "fees": "PENDING",
             "funding": "PENDING",
-            "reason_code": "LONG_BREAKOUT",
+            "reason_code": "LONG_PULLBACK_RECOVERY",
         }]
     )
     _write_state(state)
@@ -659,7 +674,6 @@ def _run_live() -> None:
     lookback = int(cfg["atr_percentile_lookback"])
     atr_samples = [_atr(rows[:idx], atr_period) for idx in range(len(rows) - lookback + 1, len(rows) + 1)]
     atr_percentile = Decimal("100") * Decimal(sum(1 for value in atr_samples if value <= atr)) / Decimal(len(atr_samples))
-    breakout = max(Decimal(str(row["high"])) for row in rows[-int(cfg["breakout_period"]) - 1 : -1])
     close = closes[-1]
     trend_period = int(cfg["long_trend_period"])
     trend_slope_hours = int(cfg["trend_slope_hours"])
@@ -668,19 +682,16 @@ def _run_live() -> None:
         closes[-trend_period - trend_slope_hours : -trend_slope_hours],
         trend_period,
     )
-    latest_high = Decimal(str(rows[-1]["high"]))
-    latest_low = Decimal(str(rows[-1]["low"]))
-    latest_range = latest_high - latest_low
-    breakout_strength = (close - breakout) / atr
-    close_location = (
-        (close - latest_low) / latest_range if latest_range > 0 else Decimal("0")
-    )
+    rsi_period = int(cfg["rsi_period"])
+    rsi_now = _rsi(closes, rsi_period)
+    rsi_previous = _rsi(closes[:-1], rsi_period)
+    recovery_level = Decimal(str(cfg["rsi_recovery_level"]))
     signal_ok = (
-        breakout_strength >= Decimal(str(cfg["breakout_atr_buffer"]))
-        and close_location >= Decimal(str(cfg["close_location_min"]))
+        rsi_previous < recovery_level <= rsi_now
         and close > trend_now
         and trend_now > trend_then
         and adx >= Decimal(str(cfg["adx_min"]))
+        and adx <= Decimal(str(cfg["adx_max"]))
         and Decimal(str(cfg["atr_percentile_min"])) <= atr_percentile <= Decimal(str(cfg["atr_percentile_max"]))
     )
     if not signal_ok:
@@ -731,7 +742,7 @@ def _run_live() -> None:
             "expected_funding_usdt": float(expected_funding),
         },
         meta={
-            "reason_code": "LONG_BREAKOUT",
+            "reason_code": "LONG_PULLBACK_RECOVERY",
             "entry": str(entry),
             "stop": str(stop),
             "target": str(target),
@@ -746,7 +757,7 @@ def _run_live() -> None:
             state=state,
             now_ms=now_ms,
         ),
-        reason_code="LONG_BREAKOUT",
+        reason_code="LONG_PULLBACK_RECOVERY",
     )
 
 

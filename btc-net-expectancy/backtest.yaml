@@ -16,15 +16,15 @@ strategy:
     atr_period: 14
     atr_stop_multiple: "1.5"
     adx_period: 14
-    adx_min: "30"
-    breakout_period: 48
+    adx_min: "15"
+    adx_max: "35"
+    rsi_period: 14
+    rsi_recovery_level: "40"
     long_trend_period: 200
     trend_slope_hours: 24
     atr_percentile_lookback: 168
     atr_percentile_min: "30"
     atr_percentile_max: "75"
-    breakout_atr_buffer: "0.25"
-    close_location_min: "0.75"
     take_profit_r: "2"
     time_stop_hours: 8
     order_ttl_hours: 4
