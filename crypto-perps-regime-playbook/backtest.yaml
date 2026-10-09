@@ -1,0 +1,37 @@
+venue:
+  name: BINANCE
+  account_type: MARGIN
+  oms_type: NETTING
+  starting_balances:
+    - amount: 100000
+      currency: USDT
+
+strategy:
+  module: strategy
+  class: CryptoPerpsRegimeStrategy
+  config_class: CryptoPerpsRegimeStrategyConfig
+  config:
+    order_id_tag: "001"
+    trade_size: "0.01"
+    adx_period: 14
+    atr_period: 14
+    adx_threshold: 25.0
+    risk_usdt: 15.0
+    leverage: 3
+    tp_mode: "fixed_2r"
+
+instrument:
+  id: BTCUSDT.BINANCE
+  kind: perpetual
+  raw_symbol: BTCUSDT
+  base_currency: BTC
+  quote_currency: USDT
+  settlement_currency: USDT
+  price_precision: 2
+  size_precision: 4
+  price_increment: "0.10"
+  size_increment: "0.0001"
+  lot_size: "0.0001"
+  maker_fee: "0.0002"
+  taker_fee: "0.0006"
+  bar_type: BTCUSDT.BINANCE-1-HOUR-LAST-EXTERNAL

@@ -1,0 +1,110 @@
+name: crypto-perps-regime-playbook
+display_name: "Crypto Perps Regime Trader"
+version: "1.0.0"
+display_name_i18n:
+  en: "Crypto Perps Regime Trader"
+  zh: "加密永续合约市场状态动量策略"
+  zh-tw: "加密永續合約市場狀態動量策略"
+  es: "Estrategia de momentum para perpetuos cripto por régimen"
+  ja: "暗号資産レジーム判定型パーペチュアル戦略"
+  vi: "Chiến lược động lượng hợp đồng vĩnh viễn theo chế độ thị trường"
+description: "Long-only trend-following crypto perpetual strategy with regime filters and dynamic risk"
+description_i18n:
+  en: "Long-only trend-following crypto perpetual strategy with regime filters and dynamic risk"
+  zh: "基于市场状态过滤与动态风控的加密永续合约多头动量策略"
+  zh-tw: "基於市場狀態過濾與動態風控的加密永續合約多頭動量策略"
+  es: "Estrategia alcista de seguimiento de tendencia en perpetuos con filtro de régimen y control de riesgo"
+  ja: "市場レジーム判定と動的リスク管理を備えた暗号資産パーペチュアル順張りロング戦略"
+  vi: "Chiến lược hợp đồng vĩnh viễn crypto theo xu hướng chỉ mở vị thế long kết hợp bộ lọc chế độ"
+long_description: |
+  This Playbook is a quantitative trend-following trading strategy designed for liquid
+  cryptocurrency perpetual contracts. It aims to capture sustained directional price momentum
+  in major digital assets when a decisive trend emerges from a consolidation regime. The core
+  thesis rests on the market reality that major digital assets exhibit persistent follow-through
+  once directional conviction forms, while entering range-bound chop produces severe whipsaws.
+  The strategy remains flat during noisy sideways conditions and commits capital only when
+  trend strength and volatility conditions confirm a persistent directional regime.
+
+  Entry decisions require alignment between trend strength, volatility state, and momentum
+  indicators. The strategy opens a long position only when trend strength reaches the confirmed
+  trending regime, volatility percentile expands healthily without entering extreme exhaustion,
+  and short-term moving average momentum crosses above the slower baseline. Furthermore, the
+  system verifies order-book liquidity and ensures the scheduled funding settlement window does
+  not introduce excessive carry friction before placing an entry order. Short positions are
+  strictly prohibited in this version until validated by an independent evaluation run.
+
+  Exits are governed by predefined structural controls attached upon order execution. Every
+  active position carries an initial stop loss calibrated to market volatility at entry,
+  enforcing a fixed monetary loss limit. The strategy exits either upon reaching the chosen
+  take-profit target structure, upon the trailing stop following favorable momentum, or via a
+  time-based stop when a trending trade fails to develop within the anticipated holding window.
+  In addition, daily account-level loss circuit breakers and consecutive losing trade limits
+  will halt subsequent entries to prevent compounding capital drawdowns during hostile regimes.
+
+  Subscribers may adjust the trading symbol universe, leverage cap, margin budget, and the
+  preferred take-profit mechanism. Adjusting leverage alters the notional exposure and margin
+  efficiency while the absolute capital risked at the initial stop loss remains strictly capped.
+  Modifying the margin budget sets the primary capital allocation baseline and determines the
+  denominator for normalized percentage performance. Choosing between a fixed multiple exit or
+  a trailing profit lock permits subscribers to balance target precision against trend extension.
+
+  The strategy underperforms in sideways, mean-reverting markets where false breakouts trigger
+  sequential stop losses. Rapid liquidity gaps around unexpected macro announcements, sudden
+  exchange outages, and adverse funding rate expansions can also degrade live net returns. Past
+  backtest performance is not a guarantee of future live trading results, and users should
+  deploy this Playbook within an isolated sub-account aligned with their risk capacity.
+market_type: contract
+trading_symbols: ["BTCUSDT"]
+tags: ["crypto", "perpetuals", "regime", "trend", "risk-parity", "contract"]
+
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+
+strategy_config:
+  trading_symbols: ["BTCUSDT"]
+  leverage: 3
+  margin_budget: "100"
+  adx_threshold: 25
+  adx_period: 14
+  atr_period: 14
+  risk_per_trade_usdt: 15.0
+  tp_mode: "fixed_2r"
+
+user_config_schema:
+  trading_symbols:
+    type: array
+    item_type: string
+    default: ["BTCUSDT"]
+    options: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    aliases:
+      btc: BTCUSDT
+      bitcoin: BTCUSDT
+      eth: ETHUSDT
+      ethereum: ETHUSDT
+      sol: SOLUSDT
+      solana: SOLUSDT
+    min_items: 1
+    max_items: 1
+    label: "Trading symbol"
+  leverage:
+    type: integer
+    default: 3
+    min: 1
+    max: 5
+    aliases:
+      3x: 3
+      5x: 5
+    label: "Leverage"
+  margin_budget:
+    type: string
+    default: "100"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Margin budget USDT"
+  tp_mode:
+    type: string
+    default: "fixed_2r"
+    options: ["fixed_2r", "trail_1r"]
+    label: "Take Profit Mode"
