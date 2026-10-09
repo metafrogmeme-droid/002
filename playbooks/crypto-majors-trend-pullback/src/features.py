@@ -236,14 +236,40 @@ def _frame_from_obb(obj: Any) -> pd.DataFrame:
     return df
 
 
-def _normalize_bars(df: pd.DataFrame) -> pd.DataFrame:
+def normalize_bars(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """prepare_frame + float OHLCV + dedup/sort + OHLC repair; returns (frame, repaired_rows)."""
     if df.empty:
-        return df
+        return df, 0
     prepared = backtest.prepare_frame(df)
     keep = [c for c in ("open", "high", "low", "close", "volume") if c in prepared.columns]
     prepared = prepared[keep].astype(float)
     prepared = prepared[~prepared.index.duplicated(keep="last")].sort_index()
-    return prepared
+    return sanitize_ohlc(prepared)
+
+
+def sanitize_ohlc(frame: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """Drop unusable rows and repair high/low so every bar satisfies
+    low <= min(open, close) <= max(open, close) <= high.
+
+    Vendor candles occasionally carry a low above the open (open copied from the
+    previous close before the first trade) which Nautilus rejects outright.
+    Returns the cleaned frame and the number of rows whose high/low were widened;
+    callers surface that count in the coverage report.
+    """
+    if frame.empty:
+        return frame, 0
+    df = frame.copy()
+    price_cols = [c for c in ("open", "high", "low", "close") if c in df.columns]
+    df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=price_cols)
+    df = df[(df[price_cols] > 0).all(axis=1)]
+    body_hi = df[["open", "close"]].max(axis=1)
+    body_lo = df[["open", "close"]].min(axis=1)
+    bad = (df["high"] < body_hi) | (df["low"] > body_lo)
+    repaired = int(bad.sum())
+    if repaired:
+        df["high"] = np.maximum(df["high"], body_hi)
+        df["low"] = np.minimum(df["low"], body_lo)
+    return df, repaired
 
 
 def fetch_klines_window(
@@ -262,6 +288,7 @@ def fetch_klines_window(
     """
     chunks: list[pd.DataFrame] = []
     requests = 0
+    repaired_rows = 0
     cursor_end = end
     truncated_by_deadline = False
     while cursor_end > start:
@@ -279,7 +306,8 @@ def fetch_klines_window(
             closed_only=True,
         )
         requests += 1
-        df = _normalize_bars(_frame_from_obb(bars))
+        df, repaired = normalize_bars(_frame_from_obb(bars))
+        repaired_rows += repaired
         if df.empty:
             break
         chunks.append(df)
@@ -299,6 +327,7 @@ def fetch_klines_window(
         "rows": int(len(frame)),
         "first_bar": frame.index.min().isoformat() if len(frame) else None,
         "last_bar": frame.index.max().isoformat() if len(frame) else None,
+        "repaired_ohlc_rows": repaired_rows,
         "truncated_by_deadline": truncated_by_deadline,
     }
     return frame, report

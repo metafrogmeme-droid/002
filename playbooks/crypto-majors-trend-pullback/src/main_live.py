@@ -226,7 +226,7 @@ def _scan_symbol(symbol: str, params: dict[str, Any], now: datetime) -> dict[str
     bars_raw = data.crypto.futures.kline(
         symbol=symbol, interval="1h", exchange=exchange, limit=1000, closed_only=True
     )
-    bars = features._normalize_bars(features._frame_from_obb(bars_raw))  # noqa: SLF001 - shared helper
+    bars, _repaired = features.normalize_bars(features._frame_from_obb(bars_raw))  # noqa: SLF001 - shared helper
     if bars.empty or len(bars) < int(params["ema_slow_period"]) + 50:
         out["block"] = Reason.SIGNAL_INVALID
         out["notes"].append("insufficient bars")
