@@ -5,32 +5,32 @@
     "2026-10-01"
   ],
   "adx_trend_min": 30.0,
-  "funding": "local Bitget + Binance proxy",
-  "trades": 240,
+  "funding": "none (unknown allowed)",
+  "trades": 241,
   "events": {
     "daily_pause": 10,
     "daily_stop": 5,
     "consecutive_loss_halt": 13
   },
   "skips": {
+    "funding_unknown_allowed_replay": 249,
     "symbol_busy": 94,
     "time_stop_deferred_funding_window": 21,
     "funding_window": 23,
-    "funding_against": 1,
     "paused": 2,
     "size_exceeds_leverage_cap": 8
   },
   "signal_evaluations": 1711,
-  "win_rate": 0.3917,
-  "avg_r_gross": 0.0951,
-  "net_expectancy_r": -0.0093,
-  "profit_factor": 0.9812,
-  "net_pnl_usdt": -33.32,
-  "fees_usdt": 365.44,
-  "funding_usdt": 9.1,
+  "win_rate": 0.39,
+  "avg_r_gross": 0.0906,
+  "net_expectancy_r": -0.0111,
+  "profit_factor": 0.9775,
+  "net_pnl_usdt": -40.1,
+  "fees_usdt": 366.48,
+  "funding_usdt": 0.0,
   "exit_reasons": {
     "TIME_STOP": 105,
-    "EXIT_SL": 87,
+    "EXIT_SL": 88,
     "EXIT_TP": 48
   }
 }

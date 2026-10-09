@@ -12,7 +12,16 @@ strategy:
   config_class: RegimeLongConfig
   config:
     order_id_tag: "001"
+    bar_types:
+      - BTCUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+      - ETHUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+      - SOLUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+    base_strategy: ema_adx_trend
+    adx_trend_min: 30.0
     slippage_ticks: 1.0
+    # Historical funding is not available for the whole window; replay lets entries
+    # through where it is unknown and counts them. Live always blocks on unknown funding.
+    unknown_funding_policy: allow
 
 execution:
   start: "2024-10-01T00:00:00Z"
@@ -61,14 +70,3 @@ instruments:
     maker_fee: "0.0002"
     taker_fee: "0.0006"
     bar_type: SOLUSDT.BITGET-1-HOUR-LAST-EXTERNAL
-
-data_requirements:
-  required_bar_fields:
-    - atr
-    - adx
-    - regime_code
-    - signal_long
-    - signal_short
-    - funding_rate_8h
-    - funding_settle_rate
-    - funding_known

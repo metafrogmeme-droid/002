@@ -1,19 +1,26 @@
 """Nautilus replay strategy for the BTC/ETH/SOL regime-filtered long Playbook.
 
-Signals, ATR and funding come from feature frames prepared by ``main_backtest``
-with ``features.compute_signals`` (same code as live). Order handling mirrors live:
-limit entry at the signal close, exchange-style stop-market + touch-triggered
-take-profit attached on fill, entry TTL, time stop, portfolio/risk limits.
+Works on plain OHLCV bars: each instrument keeps a trailing window of closed
+bars and, when the cheap breakout/volume pre-check passes, runs
+``features.compute_signals`` (same code as live) on that window. Funding comes
+from an optional point-in-time schedule passed in ``funding_json``.
 
-Replay-only simplification: a latched halt (consecutive losses / daily stop)
-resumes on the next UTC day so a multi-year replay keeps producing evidence;
-every occurrence is counted in the ledger summary. Live keeps it latched.
+Order handling mirrors live: limit entry at the signal close, exchange-style
+stop-market + touch-triggered take-profit attached on fill, entry TTL, time
+stop, portfolio/risk limits.
+
+Replay-only differences from live, all counted in the ledger:
+- a latched halt (consecutive losses / daily stop) resumes on the next UTC day
+  so a multi-year replay keeps producing evidence; live keeps it latched;
+- ``unknown_funding_policy="allow"`` lets entries through where no historical
+  funding rate is available (live always blocks on unknown funding).
 """
 import json
 import math
 from pathlib import Path
 from typing import Any, Optional
 
+import pandas as pd
 from nautilus_trader.config import StrategyConfig
 from nautilus_trader.model.data import Bar, BarType
 from nautilus_trader.model.enums import OrderSide, TimeInForce
@@ -22,23 +29,45 @@ from nautilus_trader.trading.strategy import Strategy
 
 try:
     from .action_log import ActionLog
-    from .features import funding_blocks, in_funding_window, validate_signal
+    from .features import (FundingLookup, entry_candidate, funding_blocks, in_funding_window, last_signal_row,
+                           validate_signal, warmup_bars)
     from .risk import RiskState, plan_entry
 except ImportError:  # replay engine may import this module top-level from src/
     from action_log import ActionLog
-    from features import funding_blocks, in_funding_window, validate_signal
+    from features import (FundingLookup, entry_candidate, funding_blocks, in_funding_window, last_signal_row,
+                          validate_signal, warmup_bars)
     from risk import RiskState, plan_entry
 
 HOUR_MS = 3_600_000
 DAY_MS = 86_400_000
 LEDGER_PATH = Path("/workspace/output/replay_ledger.json")
+SIGNAL_KEYS = ("base_strategy", "ema_fast", "ema_slow", "adx_period", "atr_period", "adx_trend_min",
+               "adx_range_max", "atr_rank_window", "atr_rank_min", "atr_rank_max", "volume_avg_period",
+               "volume_mult", "breakout_lookback")
 
 
 class RegimeLongConfig(StrategyConfig):
     instrument_id: Optional[InstrumentId] = None
     bar_type: Optional[BarType] = None
     instrument_ids: tuple[InstrumentId, ...] = ()
-    bar_types: tuple[BarType, ...] = ()
+    bar_types: tuple[Any, ...] = ()
+    base_strategy: str = "ema_adx_trend"
+    ema_fast: int = 20
+    ema_slow: int = 50
+    adx_period: int = 14
+    atr_period: int = 14
+    adx_trend_min: float = 30.0
+    adx_range_max: float = 20.0
+    atr_rank_window: int = 720
+    atr_rank_min: float = 20.0
+    atr_rank_max: float = 90.0
+    volume_avg_period: int = 20
+    volume_mult: float = 1.5
+    breakout_lookback: int = 20
+    window_extra_bars: int = 280
+    bar_ts_is_open: bool = True
+    funding_json: str = ""
+    unknown_funding_policy: str = "block"
     risk_per_trade_usdt: float = 15.0
     max_leverage: float = 5.0
     margin_budget: str = "1500"
@@ -82,8 +111,11 @@ class RegimeLongStrategy(Strategy):
             "risk_per_trade_usdt", "max_leverage", "margin_budget", "max_concurrent", "stop_atr_mult",
             "tp_r_multiple", "time_stop_hours", "entry_ttl_hours", "daily_pause_usdt", "daily_stop_usdt",
             "max_consecutive_losses", "funding_block_minutes", "funding_max_against_8h")}
-        self.feature_frames: dict[str, Any] = {}
-        self._rows: dict[str, dict[int, dict[str, float]]] = {}
+        self._sig_cfg = {k: getattr(config, k) for k in SIGNAL_KEYS}
+        self._window = warmup_bars(self._sig_cfg) + int(config.window_extra_bars)
+        self._bars: dict[str, dict[str, list[float]]] = {}
+        self._funding: dict[str, FundingLookup] = {}
+        self._signal_evals = 0
         self._instruments: dict[str, Any] = {}
         self._risk = RiskState()
         self._alog = ActionLog(run_id="replay", mode="historical")
@@ -93,38 +125,25 @@ class RegimeLongStrategy(Strategy):
         self._trades: list[dict[str, Any]] = []
         self._events = {"daily_pause": 0, "daily_stop": 0, "consecutive_loss_halt": 0}
         self._skips: dict[str, int] = {}
-        self._ts_shift: Optional[int] = None
-
-    # ---- feature frame injection -------------------------------------------------
-    def set_feature_frames(self, feature_frames: Any) -> None:
-        self.feature_frames = feature_frames or {}
-
-    def _index_frames(self) -> None:
-        cols = ("open", "close", "atr", "adx", "regime_code", "signal_long", "signal_short",
-                "funding_rate_8h", "funding_settle_rate", "funding_known")
-        for key, frame in (self.feature_frames or {}).items():
-            sym = str(key).split(".")[0]
-            rows: dict[int, dict[str, float]] = {}
-            idx_ms = [int(ts.value // 1_000_000) for ts in frame.index]
-            data = {c: frame[c].tolist() for c in cols}
-            for i, ts in enumerate(idx_ms):
-                rows[ts] = {c: data[c][i] for c in cols}
-            self._rows[sym] = rows
 
     # ---- lifecycle ---------------------------------------------------------------
     def on_start(self) -> None:
-        if not self.feature_frames:
-            raise RuntimeError("feature frames were not injected; check data_requirements.required_bar_fields")
-        self._index_frames()
+        if self.cfg.funding_json:
+            for sym, payload in json.loads(self.cfg.funding_json).items():
+                self._funding[str(sym)] = FundingLookup.from_dict(payload)
         bar_types = list(self.cfg.bar_types) or ([self.cfg.bar_type] if self.cfg.bar_type else [])
         if not bar_types:
-            raise RuntimeError("no bar types configured")
+            bar_types = [f"{inst.id}-1-HOUR-LAST-EXTERNAL" for inst in self.cache.instruments()]
+        if not bar_types:
+            raise RuntimeError("no bar types configured and no instruments in cache")
         for raw_bt in bar_types:
             bt = BarType.from_str(raw_bt) if isinstance(raw_bt, str) else raw_bt
             inst = self.cache.instrument(bt.instrument_id)
             if inst is None:
                 raise RuntimeError(f"instrument {bt.instrument_id} missing from cache")
-            self._instruments[bt.instrument_id.symbol.value] = inst
+            sym = bt.instrument_id.symbol.value
+            self._instruments[sym] = inst
+            self._bars[sym] = {"ts": [], "open": [], "high": [], "low": [], "close": [], "volume": []}
             self.subscribe_bars(bt)
 
     def on_stop(self) -> None:
@@ -137,7 +156,9 @@ class RegimeLongStrategy(Strategy):
             path.write_text(json.dumps({
                 "trades": self._trades, "events": self._events, "skips": self._skips,
                 "action_log": self._alog.rows[-400:], "action_log_rows_total": len(self._alog.rows),
-                "ts_shift_ms": self._ts_shift,
+                "signal_evaluations": self._signal_evals,
+                "funding_symbols": sorted(self._funding),
+                "unknown_funding_policy": self.cfg.unknown_funding_policy,
             }, default=str))
         except Exception as exc:  # pragma: no cover - surfaced in run stderr
             self._ledger_error = str(exc)
@@ -146,19 +167,33 @@ class RegimeLongStrategy(Strategy):
     def _skip(self, reason: str) -> None:
         self._skips[reason] = self._skips.get(reason, 0) + 1
 
-    def _row_for(self, sym: str, bar: Bar) -> Optional[tuple[int, dict[str, float]]]:
-        rows = self._rows.get(sym)
-        if not rows:
+    def _bar_open_ms(self, ts_ns: int) -> int:
+        ts = int(ts_ns // 1_000_000)
+        return ts if self.cfg.bar_ts_is_open else ts - HOUR_MS
+
+    def _push_bar(self, sym: str, t_open: int, bar: Bar) -> dict[str, list[float]]:
+        buf = self._bars[sym]
+        buf["ts"].append(t_open)
+        buf["open"].append(float(bar.open))
+        buf["high"].append(float(bar.high))
+        buf["low"].append(float(bar.low))
+        buf["close"].append(float(bar.close))
+        buf["volume"].append(float(bar.volume))
+        if len(buf["ts"]) > self._window:
+            for key in buf:
+                del buf[key][0]
+        return buf
+
+    def _signal_row(self, buf: dict[str, list[float]]) -> Optional[dict[str, float]]:
+        if len(buf["ts"]) < warmup_bars(self._sig_cfg):
             return None
-        ts = int(bar.ts_event // 1_000_000)
-        close = float(bar.close)
-        candidates = (self._ts_shift,) if self._ts_shift is not None else (0, -HOUR_MS)
-        for shift in candidates:
-            row = rows.get(ts + shift)
-            if row is not None and abs(float(row["close"]) - close) <= 1e-9 * max(1.0, close) + 1e-6:
-                self._ts_shift = shift
-                return ts + shift, row
-        return None
+        if not entry_candidate(buf["high"], buf["low"], buf["close"], buf["volume"], self._sig_cfg,
+                               want_short=bool(self.cfg.allow_short)):
+            return None
+        self._signal_evals += 1
+        frame = pd.DataFrame({k: buf[k] for k in ("open", "high", "low", "close", "volume")},
+                             index=pd.to_datetime(buf["ts"], unit="ms", utc=True))
+        return last_signal_row(frame, self._sig_cfg)
 
     def _tick(self, inst: Any) -> float:
         return float(inst.price_increment)
@@ -170,23 +205,23 @@ class RegimeLongStrategy(Strategy):
     def on_bar(self, bar: Bar) -> None:
         sym = bar.bar_type.instrument_id.symbol.value
         inst = self._instruments.get(sym)
-        found = self._row_for(sym, bar)
-        if inst is None or found is None:
-            self._skip("feature_row_missing")
+        if inst is None:
             return
-        t_open, row = found
+        t_open = self._bar_open_ms(bar.ts_event)
         t_close = t_open + HOUR_MS
+        buf = self._push_bar(sym, t_open, bar)
         day = t_open // DAY_MS
         if self._risk.day != day and self._risk.latched_halt:
             self._risk.latched_halt = ""
         self._risk.roll(day)
 
+        funding = self._funding.get(sym)
         pos = self._open.get(sym)
-        if pos is not None and pos.get("filled_bar_open", t_open) < t_open:
-            rate = float(row["funding_settle_rate"] or 0.0)
+        if pos is not None and funding is not None and pos.get("filled_bar_open", t_open) < t_open:
+            rate = funding.settle_rate(t_open)
             if rate:
                 sgn = 1.0 if pos["side"] == "long" else -1.0
-                pos["funding"] += sgn * pos["qty"] * float(row["open"]) * rate
+                pos["funding"] += sgn * pos["qty"] * float(bar.open) * rate
 
         if pos is not None and pos.get("filled_bar_open") is not None:
             held = t_close - pos["filled_bar_open"]
@@ -211,7 +246,9 @@ class RegimeLongStrategy(Strategy):
         if block:
             for psym in list(self._pending):
                 self._cancel_pending(psym, t_close, "PAUSE_CANCEL")
-        self._maybe_enter(sym, inst, row, t_close, block)
+        row = self._signal_row(buf)
+        if row is not None:
+            self._maybe_enter(sym, inst, row, t_close, block)
 
     def _maybe_enter(self, sym: str, inst: Any, row: dict[str, float], t_close: int, block: Optional[str]) -> None:
         allowed = ("long", "short") if self.cfg.allow_short else ("long",)
@@ -234,8 +271,11 @@ class RegimeLongStrategy(Strategy):
         if in_funding_window(t_close, int(self.cfg.funding_block_minutes)):
             self._skip("funding_window")
             return
-        f8h = float(row["funding_rate_8h"]) if row["funding_known"] >= 0.5 else None
-        if funding_blocks(action, f8h, float(self.cfg.funding_max_against_8h)):
+        funding = self._funding.get(sym)
+        f8h = funding.rate_8h_at(t_close) if funding is not None else None
+        if f8h is None and self.cfg.unknown_funding_policy == "allow":
+            self._skip("funding_unknown_allowed_replay")
+        elif funding_blocks(action, f8h, float(self.cfg.funding_max_against_8h)):
             self._skip("funding_against" if f8h is not None else "funding_unknown")
             return
         atr = float(row["atr"])
@@ -312,7 +352,7 @@ class RegimeLongStrategy(Strategy):
             self.submit_order(sl)
             self.submit_order(tp)
             bar_open = (ts // HOUR_MS) * HOUR_MS
-            if self._ts_shift == -HOUR_MS and ts % HOUR_MS == 0:
+            if not self.cfg.bar_ts_is_open and ts % HOUR_MS == 0:
                 bar_open = ts - HOUR_MS
             self._open[sym] = {**od, "entry_fill": fill_px, "fill_ms": ts, "filled_bar_open": bar_open,
                               "sl_id": sl.client_order_id, "tp_id": tp.client_order_id, "funding": 0.0,

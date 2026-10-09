@@ -70,12 +70,8 @@ def _run(ohlcv_data, spec):
     engine = BacktestEngine(config=BacktestEngineConfig(trader_id="SMOKE-001"))
     engine.add_venue(venue=Venue(venue), oms_type=OmsType.NETTING, account_type=AccountType.MARGIN,
                      base_currency=USDT, starting_balances=[Money(100_000, USDT)])
-    start = pd.Timestamp(spec["execution"]["start"])
     end = pd.Timestamp(spec["execution"]["end"])
-    for fld in spec["data_requirements"]["required_bar_fields"]:
-        for key, frame in ohlcv_data.items():
-            w = frame.loc[start:end]
-            assert fld in frame.columns and not w[fld].isna().all(), (key, fld)
+    assert "data_requirements" not in spec
     for ins in spec["instruments"]:
         inst = CryptoPerpetual(
             instrument_id=InstrumentId.from_str(ins["id"]), raw_symbol=Symbol(ins["raw_symbol"]),
@@ -85,12 +81,11 @@ def _run(ohlcv_data, spec):
             margin_init=Decimal("0.2"), margin_maint=Decimal("0.01"), maker_fee=Decimal(ins["maker_fee"]),
             taker_fee=Decimal(ins["taker_fee"]), ts_event=0, ts_init=0)
         engine.add_instrument(inst)
-        frame = ohlcv_data[ins["id"]].loc[start:end]
-        engine.add_data(BarDataWrangler(BarType.from_str(ins["bar_type"]), inst).process(
-            frame[["open", "high", "low", "close", "volume"]]))
+        frame = ohlcv_data[ins["id"]].loc[:end]
+        assert list(frame.columns) == ["open", "high", "low", "close", "volume"], frame.columns
+        engine.add_data(BarDataWrangler(BarType.from_str(ins["bar_type"]), inst).process(frame))
     cfg = RegimeLongConfig(**spec["strategy"]["config"])
     strat = RegimeLongStrategy(cfg)
-    strat.set_feature_frames(ohlcv_data)
     engine.add_strategy(strat)
     engine.run()
     n = len(engine.trader.generate_positions_report())

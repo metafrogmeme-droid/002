@@ -1,9 +1,10 @@
 """Historical replay for the BTC/ETH/SOL regime-filtered long Playbook (GetAgent engine).
 
 Fetches Bitget 1H perpetual klines and funding through ``getagent.data`` in
-chunks, builds replay feature frames with the same signal code as live, runs
-the managed Nautilus replay, and reports net metrics from the strategy ledger
-(engine PnL incl. fees, minus funding and 1-tick slippage on taker exits).
+chunks, runs the managed Nautilus replay on plain OHLCV (the strategy computes
+signals with the same code as live), passes the fetched funding schedule in the
+strategy config, and reports net metrics from the strategy ledger (engine PnL
+incl. fees, minus funding and 1-tick slippage on taker exits).
 Does not import live trading code.
 """
 import copy
@@ -17,7 +18,7 @@ import pandas as pd
 
 from getagent import backtest, data, runtime
 
-from .features import REPLAY_FIELDS, attach_replay_columns, compute_indicators, compute_signals
+from .features import FundingLookup, compute_indicators, compute_signals
 
 HOUR_MS = 3_600_000
 DAY_MS = 86_400_000
@@ -177,30 +178,36 @@ def run() -> None:
 
     ohlcv: dict[str, pd.DataFrame] = {}
     coverage: dict[str, Any] = {}
+    funding_payload: dict[str, Any] = {}
     venue = str((spec.get("venue") or {}).get("name", "BITGET"))
     for sym in symbols:
         bars = _fetch_klines(sym, fetch_start, end_ms, deadline)
         funding, finfo = _fetch_funding(sym, fetch_start, end_ms, deadline)
+        lookup = FundingLookup([int(ts.value // 1_000_000) for ts in funding.index], funding.tolist(),
+                               float((cfg.get("funding_interval_hours") or {}).get(sym, 8)))
+        if len(lookup):
+            funding_payload[sym] = lookup.to_dict()
         sig = compute_signals(compute_indicators(bars, cfg), cfg)
-        frame = attach_replay_columns(sig, funding if len(funding) else None,
-                                      float((cfg.get("funding_interval_hours") or {}).get(sym, 8)))
-        window = frame[(frame.index >= pd.Timestamp(start_ms, unit="ms", tz="UTC"))]
+        window = sig[(sig.index >= pd.Timestamp(start_ms, unit="ms", tz="UTC"))]
         coverage[sym] = {
             "rows": int(len(bars)), "first_bar": bars.index.min().isoformat(),
             "last_bar": bars.index.max().isoformat(), "funding": finfo,
-            "funding_known_share_in_window": float(window["funding_known"].mean()) if len(window) else 0.0,
+            "funding_known_share_in_window": lookup.known_share(start_ms, end_ms),
             "signals_long_in_window": int(window["signal_long"].sum()),
         }
-        cols = ["open", "high", "low", "close", "volume", *REPLAY_FIELDS]
-        ohlcv[f"{sym}.{venue}"] = backtest.prepare_frame(frame[cols].copy())
+        ohlcv[f"{sym}.{venue}"] = backtest.prepare_frame(bars[["open", "high", "low", "close", "volume"]].copy())
     fetch_seconds = (_now() - started).total_seconds()
 
     strat_cfg = dict((spec.get("strategy") or {}).get("config") or {})
-    for key in ("risk_per_trade_usdt", "max_leverage", "max_concurrent", "stop_atr_mult", "tp_r_multiple",
+    for key in ("base_strategy", "ema_fast", "ema_slow", "adx_period", "atr_period", "adx_trend_min",
+                "adx_range_max", "atr_rank_window", "atr_rank_min", "atr_rank_max", "volume_avg_period",
+                "volume_mult", "breakout_lookback",
+                "risk_per_trade_usdt", "max_leverage", "max_concurrent", "stop_atr_mult", "tp_r_multiple",
                 "time_stop_hours", "entry_ttl_hours", "daily_pause_usdt", "daily_stop_usdt",
                 "max_consecutive_losses", "funding_block_minutes", "funding_max_against_8h", "allow_short"):
         if cfg.get(key) is not None:
             strat_cfg[key] = cfg[key]
+    strat_cfg["funding_json"] = json.dumps(funding_payload)
     strat_cfg["margin_budget"] = str(cfg.get("margin_budget", "1500"))
     strat_cfg["signal_start_ms"] = start_ms
     strat_cfg["ledger_path"] = str(OUT_DIR / "replay_ledger.json")
@@ -274,5 +281,7 @@ def run() -> None:
             "exit_reasons": m.get("exit_reasons"),
             "coverage": coverage,
             "adx_trend_min": cfg.get("adx_trend_min"),
+            "unknown_funding_policy": strat_cfg.get("unknown_funding_policy", "block"),
+            "signal_evaluations": ledger.get("signal_evaluations"),
         }),
     )
