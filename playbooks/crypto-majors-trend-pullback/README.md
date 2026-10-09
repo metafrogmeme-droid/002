@@ -81,6 +81,15 @@ rejection. Forward criteria are fixed in advance: PASS when profit factor is at
 least 1.3 and Sharpe at least 0.5 after thirty live trades; FAIL and stop when
 profit factor is at or below 1.1.
 
+The replay strategy computes every indicator bar by bar from raw OHLCV, so the
+platform's independent re-run of the strategy class (its official order, fill
+and position evidence) uses the same logic as this Playbook's own report. The
+incremental indicators are checked against the vectorised live-path
+indicators on every run (`indicator_parity_incremental_vs_vectorised`).
+Funding history is read from the sidecar written during the run, then from the
+data SDK, and if neither is available the funding gate is switched off and
+`funding_known: false` is reported rather than guessed.
+
 ## 风险 / Risk
 
 The strategy underperforms in choppy, range-bound markets where trend
