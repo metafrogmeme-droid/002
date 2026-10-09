@@ -1,4 +1,4 @@
-# BTC Net Expectancy
+# SOL Net Expectancy
 
 **Research status:** rejected and fail-closed. `activation_eligible` is `false`;
 live execution emits `RESEARCH_VALIDATION_FAILED` and places no order. Do not
@@ -7,7 +7,7 @@ declared evidence gate.
 
 ## 策略 / Strategy
 
-This is one long-only Sleeve A Playbook for the Bitget `BTCUSDT` USDT perpetual. It seeks hourly momentum recoveries after pullbacks inside a rising long-term trend, only when trend strength and the volatility regime agree. It is designed for an isolated sub-account dedicated to this Playbook. It never opens shorts. Missing, stale, invalid, or unsupported data produces `NO TRADE`.
+This is one long-only Sleeve A Playbook for the Bitget `SOLUSDT` USDT perpetual. It seeks hourly momentum recoveries after pullbacks inside a rising long-term trend, only when trend strength and the volatility regime agree. It is designed for an isolated sub-account dedicated to this Playbook. It never opens shorts. Missing, stale, invalid, or unsupported data produces `NO TRADE`.
 
 The live liquidity gate requires spread at or below 5 bps and 24-hour quote volume at or above the configured floor. The funding gate blocks new orders within 15 minutes of an 8-hour settlement and whenever expected funding over the planned hold exceeds 0.1R. Contract support, sub-account existence, leverage, tick, lot, minimum notional, and position ownership are checked before mutation.
 

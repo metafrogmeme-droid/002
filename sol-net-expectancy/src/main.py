@@ -9,9 +9,10 @@ import pandas as pd
 from getagent import backtest, data, runtime
 
 
-SYMBOL = "BTCUSDT"
+SYMBOL = "SOLUSDT"
+TICK_SIZE = 0.001
 INTERVAL_MS = 3_600_000
-STATE_PATH = Path("/workspace/.state/btc-net-expectancy.json")
+STATE_PATH = Path("/workspace/.state/sol-net-expectancy.json")
 
 
 def _cfg() -> dict[str, Any]:
@@ -47,7 +48,7 @@ def _trade_metrics(
         net = _money(position.get("realized_pnl"))
         commissions = sum(_money(value) for value in position.get("commissions", []))
         quantity = float(position.get("peak_qty", 0) or 0)
-        slippage = quantity * 0.1 * 2.0
+        slippage = quantity * TICK_SIZE * 2.0
         opened_ms = _timestamp_ms(position.get("ts_opened"))
         closed_ms = _timestamp_ms(position.get("ts_closed"))
         entry_notional = quantity * float(position.get("avg_px_open", 0) or 0)
@@ -184,7 +185,7 @@ def _write_report(
     raw["starting_balance"] = summary.get("starting_balance")
     raw["total_return_pct"] = net_pnl / margin_budget * 100.0
     raw["evidence"] = {
-        "source": "Bitget BTCUSDT perpetual 1h bars",
+        "source": "Bitget SOLUSDT perpetual 1h bars",
         "rows": len(frame),
         "first_bar": frame.index.min().isoformat(),
         "last_bar": frame.index.max().isoformat(),
@@ -241,7 +242,7 @@ def _run_historical() -> None:
         raise RuntimeError(f"two-year replay coverage incomplete: {frame.index.min()}")
     funding_by_settlement_ms = _fetch_historical_funding()
     result = backtest.run(
-        ohlcv_data={"BTCUSDT.BITGET": frame},
+        ohlcv_data={"SOLUSDT.BITGET": frame},
         spec=runtime.backtest_spec,
     )
     risk_usdt = float(_cfg()["risk_usdt"])
@@ -258,11 +259,11 @@ def _run_historical() -> None:
         "end": "2026-10-09T00:00:00Z",
     }
     development_result = backtest.run(
-        ohlcv_data={"BTCUSDT.BITGET": frame},
+        ohlcv_data={"SOLUSDT.BITGET": frame},
         spec=development_spec,
     )
     validation_result = backtest.run(
-        ohlcv_data={"BTCUSDT.BITGET": frame},
+        ohlcv_data={"SOLUSDT.BITGET": frame},
         spec=validation_spec,
     )
     development_metrics = _trade_metrics(

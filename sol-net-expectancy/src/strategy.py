@@ -10,7 +10,7 @@ from nautilus_trader.model.objects import Price, Quantity
 from nautilus_trader.trading.strategy import Strategy
 
 
-class BtcNetExpectancyConfig(StrategyConfig):
+class SolNetExpectancyConfig(StrategyConfig):
     instrument_id: Optional[InstrumentId] = None
     bar_type: Optional[BarType] = None
     instrument_ids: tuple[InstrumentId, ...] = ()
@@ -34,8 +34,8 @@ class BtcNetExpectancyConfig(StrategyConfig):
     min_24h_volume_usdt: str = "100000000"
 
 
-class BtcNetExpectancyStrategy(Strategy):
-    def __init__(self, config: BtcNetExpectancyConfig) -> None:
+class SolNetExpectancyStrategy(Strategy):
+    def __init__(self, config: SolNetExpectancyConfig) -> None:
         super().__init__(config)
         self.cfg = config
         self._instrument: Optional[Instrument] = None

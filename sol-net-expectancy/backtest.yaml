@@ -8,8 +8,8 @@ venue:
 
 strategy:
   module: strategy
-  class: BtcNetExpectancyStrategy
-  config_class: BtcNetExpectancyConfig
+  class: SolNetExpectancyStrategy
+  config_class: SolNetExpectancyConfig
   config:
     order_id_tag: "001"
     risk_usdt: "15"
@@ -31,20 +31,20 @@ strategy:
     min_24h_volume_usdt: "100000000"
 
 instrument:
-  id: BTCUSDT.BITGET
+  id: SOLUSDT.BITGET
   kind: perpetual
-  raw_symbol: BTCUSDT
-  base_currency: BTC
+  raw_symbol: SOLUSDT
+  base_currency: SOL
   quote_currency: USDT
   settlement_currency: USDT
-  price_precision: 1
-  size_precision: 4
-  price_increment: "0.1"
-  size_increment: "0.0001"
-  lot_size: "0.0001"
+  price_precision: 3
+  size_precision: 1
+  price_increment: "0.001"
+  size_increment: "0.1"
+  lot_size: "0.1"
   maker_fee: "0.0002"
   taker_fee: "0.0006"
-  bar_type: BTCUSDT.BITGET-1-HOUR-LAST-EXTERNAL
+  bar_type: SOLUSDT.BITGET-1-HOUR-LAST-EXTERNAL
 
 execution:
   start: "2024-10-09T00:00:00Z"

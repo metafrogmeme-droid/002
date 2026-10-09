@@ -1,23 +1,23 @@
-name: btc-net-expectancy
-display_name: "BTC Net Expectancy"
+name: sol-net-expectancy
+display_name: "SOL Net Expectancy"
 version: "1.0.0"
 display_name_i18n:
-  en: "BTC Net Expectancy"
-  zh: "BTC 净期望策略"
-  zh-tw: "BTC 淨期望策略"
-  es: "Expectativa neta de BTC"
-  ja: "BTCネット期待値"
-  vi: "Kỳ vọng ròng BTC"
-description: "Long-only BTCUSDT perpetual trend-pullback entries with volatility, liquidity, funding, and fixed-risk controls."
+  en: "SOL Net Expectancy"
+  zh: "SOL 净期望策略"
+  zh-tw: "SOL 淨期望策略"
+  es: "Expectativa neta de SOL"
+  ja: "SOLネット期待値"
+  vi: "Kỳ vọng ròng SOL"
+description: "Long-only SOLUSDT perpetual trend-pullback entries with volatility, liquidity, funding, and fixed-risk controls."
 description_i18n:
-  en: "Long-only BTCUSDT perpetual trend-pullback entries with volatility, liquidity, funding, and fixed-risk controls."
-  zh: "仅做多 BTCUSDT 永续合约，采用趋势、波动率、流动性、资金费率和固定风险控制。"
-  zh-tw: "僅做多 BTCUSDT 永續合約，採用趨勢、波動率、流動性、資金費率和固定風險控制。"
-  es: "Entradas tendenciales solo largas en el perpetuo BTCUSDT con controles de volatilidad, liquidez, financiación y riesgo fijo."
-  ja: "BTCUSDT無期限契約をロング限定で運用し、トレンド、変動性、流動性、資金調達、固定リスクを管理します。"
-  vi: "Chiến lược chỉ mua hợp đồng vĩnh viễn BTCUSDT với kiểm soát xu hướng, biến động, thanh khoản, funding và rủi ro cố định."
+  en: "Long-only SOLUSDT perpetual trend-pullback entries with volatility, liquidity, funding, and fixed-risk controls."
+  zh: "仅做多 SOLUSDT 永续合约，采用趋势、波动率、流动性、资金费率和固定风险控制。"
+  zh-tw: "僅做多 SOLUSDT 永續合約，採用趨勢、波動率、流動性、資金費率和固定風險控制。"
+  es: "Entradas tendenciales solo largas en el perpetuo SOLUSDT con controles de volatilidad, liquidez, financiación y riesgo fijo."
+  ja: "SOLUSDT無期限契約をロング限定で運用し、トレンド、変動性、流動性、資金調達、固定リスクを管理します。"
+  vi: "Chiến lược chỉ mua hợp đồng vĩnh viễn SOLUSDT với kiểm soát xu hướng, biến động, thanh khoản, funding và rủi ro cố định."
 long_description: |
-  This Playbook aims to capture sustained upward trends in the BTC perpetual market while measuring success from net trading outcomes rather than displayed return alone. It is deliberately long-only and treats capital preservation as part of the thesis. The strategy avoids participation when market data, liquidity, account ownership, or funding conditions cannot be verified, so an uncertain input produces no trade instead of an optimistic assumption.
+  This Playbook aims to capture sustained upward trends in the SOL perpetual market while measuring success from net trading outcomes rather than displayed return alone. It is deliberately long-only and treats capital preservation as part of the thesis. The strategy avoids participation when market data, liquidity, account ownership, or funding conditions cannot be verified, so an uncertain input produces no trade instead of an optimistic assumption.
 
   It enters long only when momentum recovers from a pullback inside a rising long-term trend and an acceptable volatility regime. A live liquidity check must also confirm a narrow spread and sufficient turnover. The funding check rejects entries near settlement or when the expected holding cost consumes too much of the planned risk. Entry orders are passive limits, and stale unfilled orders are cancelled rather than chased.
 
@@ -27,21 +27,21 @@ long_description: |
 
   The main risk is repeated failed recoveries during choppy or abruptly reversing markets. Gaps, exchange outages, delayed data, fee-tier differences, unexpected funding, and limit-order non-fills can make live results worse than historical evidence. The strategy may underperform when trends are weak or volatility changes faster than hourly indicators react. Backtests cannot guarantee positive live expectancy, and the Playbook must be stopped when its declared loss controls or forward failure criteria are reached.
 market_type: contract
-trading_symbols: ["BTCUSDT"]
+trading_symbols: ["SOLUSDT"]
 output_kind: trade_strategy
 decision_mode: deterministic
 backtest_support: full
 runtime_profile: deterministic
 execution_mode: follow_trade
 follow_trade_supported: true
-tags: ["btc", "contract", "long-only", "trend", "risk-controlled"]
+tags: ["sol", "contract", "long-only", "trend", "risk-controlled"]
 schedule:
   cron: "30 * * * *"
   tz: "UTC"
 
 strategy_config:
   activation_eligible: false
-  trading_symbols: ["BTCUSDT"]
+  trading_symbols: ["SOLUSDT"]
   leverage: 5
   margin_budget: "300"
   risk_usdt: "15"
