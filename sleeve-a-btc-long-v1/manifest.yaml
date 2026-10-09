@@ -1,0 +1,88 @@
+name: sleeve-a-btc-long-v1
+display_name: "Sleeve A BTC Long Trend v1"
+version: "0.1.0"
+display_name_i18n:
+  en: "Sleeve A BTC Long Trend v1"
+  zh: "A组 BTC 做多趋势 v1"
+  zh-tw: "A組 BTC 做多趨勢 v1"
+  es: "Sleeve A BTC Long Trend v1"
+  ja: "スリーブA BTCロングトレンド v1"
+  vi: "Sleeve A BTC Long Trend v1"
+description: "Long-only BTC perpetual trend and dip-buy playbook with fixed fractional risk per trade"
+description_i18n:
+  en: "Long-only BTC perpetual trend and dip-buy playbook with fixed fractional risk per trade"
+  zh: "仅做多的 BTC 永续趋势与回调买入策略，每笔交易固定风险"
+  zh-tw: "僅做多的 BTC 永續趨勢與回調買入策略，每筆交易固定風險"
+  es: "Playbook long-only de tendencia y compra en caídas en perpetuos de BTC con riesgo fijo por operación"
+  ja: "一取引あたりのリスクを固定したBTC perpetualロング専用トレンド戦略"
+  vi: "Playbook long-only theo xu hướng và mua dip cho hợp đồng vĩnh cửu BTC với rủi ro cố định mỗi lệnh"
+long_description: |
+  This Playbook is a long-only strategy on the BTC perpetual futures market that aims to capture sustained upward moves and sharp rebounds while sitting out weak conditions. The thesis is that strong crypto uptrends tend to persist once momentum aligns with the broader direction, and that brief panic selloffs inside an otherwise healthy market often snap back quickly. It therefore pursues two behaviors in one sleeve: riding established uptrends and buying after sudden downside dislocations. It never opens short positions, so bear markets and prolonged sideways grinds leave it mostly idle.
+
+  Entry decisions combine a trend read with a volatility regime read on hourly price action. When momentum aligns with the broader direction and the regime read confirms a tradeable trend, the Playbook enters long. When the market instead shows an exhausted short-term selloff inside a calm regime, it enters long to capture the expected bounce. When neither pattern is present, or when validity checks on data freshness, liquidity, funding timing, or existing exposure fail, it opens nothing and waits for the next hourly read.
+
+  Exits work through predefined protection and objective levels attached at entry. Every position carries a protective stop derived from recent volatility and a take profit objective scaled from the same risk distance, so each trade risks a bounded amount for a larger gain. Drifting positions are closed after a bounded holding period, shorter for bounce trades and longer for trend trades. The Playbook holds at most one position at a time since the whole crypto sleeve counts as a single cluster, and it never adds to a losing trade.
+
+  Subscribers may tune a small set of parameters. Leverage controls position sizing efficiency and amplifies both upside and drawdown equally without making entries more selective. Margin budget is the per-strategy capital cap the platform sizes orders against and uses as the denominator for return percentage. The trend sensitivity threshold adjusts how demanding the regime read is, with a stricter setting producing fewer but more deliberate signals.
+
+  The main risk is whipsaw in choppy markets where entries trigger just before reversals, producing strings of small stopped losses that compound into meaningful drawdown. Gap moves on major news and adverse funding dislocation can extend losing streaks beyond the historical record. This trend style is unsuitable for anyone unable to tolerate long flat idle periods punctuated by clustered losses, and past simulation is not a guarantee of live profitability.
+market_type: contract
+trading_symbols: ["BTCUSDT"]
+tags: ["btc", "contract", "trend", "long-only", "sleeve-a"]
+schedule:
+  cron: "5 * * * *"
+  tz: "UTC"
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+strategy_config:
+  trading_symbols: ["BTCUSDT"]
+  entry_timeframe: "1h"
+  ema_fast: 20
+  ema_slow: 50
+  adx_period: 14
+  adx_threshold: 20
+  atr_period: 14
+  atr_mult: 1.5
+  tp_r_mult: 2.0
+  rsi_period: 14
+  rsi_oversold: 30
+  atr_pct_lookback: 100
+  atr_pct_max: 95
+  trend_time_stop_bars: 8
+  mr_time_stop_bars: 2
+  leverage: 3
+  risk_usdt: "15"
+  margin_budget: "300"
+  max_positions: 1
+  funding_interval_h: 8
+  funding_blackout_min: 15
+  max_spread_bps: 5
+  min_24h_volume_usdt: "50000000"
+user_config_schema:
+  trading_symbols:
+    type: array
+    item_type: string
+    default: ["BTCUSDT"]
+    options: ["BTCUSDT"]
+    min_items: 1
+    max_items: 1
+    label: "Trading symbol"
+  leverage:
+    type: integer
+    default: 3
+    min: 1
+    max: 5
+    label: "Leverage"
+  risk_usdt:
+    type: string
+    default: "15"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Risk per trade USDT"
+  margin_budget:
+    type: string
+    default: "300"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Margin budget USDT"

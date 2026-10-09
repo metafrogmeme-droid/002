@@ -1,0 +1,48 @@
+venue:
+  name: BINANCE
+  account_type: MARGIN
+  oms_type: NETTING
+  starting_balances:
+    - amount: 100000
+      currency: USDT
+
+strategy:
+  module: strategy
+  class: BtcLongAtrStrategy
+  config_class: BtcLongAtrStrategyConfig
+  config:
+    order_id_tag: "001"
+    trade_size: "0.01"
+    ema_fast: 20
+    ema_slow: 50
+    adx_period: 14
+    adx_threshold: 20
+    atr_period: 14
+    atr_mult: 1.5
+    tp_r_mult: 2.0
+    rsi_period: 14
+    rsi_oversold: 30
+    atr_pct_lookback: 100
+    atr_pct_max: 95
+    trend_time_stop_bars: 8
+    mr_time_stop_bars: 2
+
+instrument:
+  id: BTCUSDT.BINANCE
+  kind: perpetual
+  raw_symbol: BTCUSDT
+  base_currency: BTC
+  quote_currency: USDT
+  settlement_currency: USDT
+  price_precision: 1
+  size_precision: 4
+  price_increment: "0.1"
+  size_increment: "0.0001"
+  lot_size: "0.0001"
+  maker_fee: "0.0002"
+  taker_fee: "0.0006"
+  bar_type: BTCUSDT.BINANCE-1-HOUR-LAST-EXTERNAL
+
+execution:
+  start: "2024-10-09T00:00:00"
+  end: "2026-10-01T00:00:00"
