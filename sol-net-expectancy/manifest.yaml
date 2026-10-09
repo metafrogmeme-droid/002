@@ -52,7 +52,7 @@ strategy_config:
   adx_max: "35"
   rsi_period: 14
   rsi_recovery_level: "40"
-  long_trend_period: 100
+  long_trend_period: 200
   trend_slope_hours: 24
   atr_percentile_lookback: 168
   atr_percentile_min: "30"
