@@ -1,0 +1,138 @@
+name: crypto-perp-regime-long
+version: "1.0.0"
+display_name: "Crypto Perp Regime Long (BTC/ETH/SOL) - v1 forward-test candidate"
+display_name_i18n:
+  en: "Crypto Perp Regime Long (BTC/ETH/SOL) - v1 forward-test candidate"
+  zh: "加密永续趋势突破做多 (BTC/ETH/SOL) - v1 前向测试候选"
+  zh-tw: "加密永續趨勢突破做多 (BTC/ETH/SOL) - v1 前向測試候選"
+  es: "Crypto Perp Regime Long (BTC/ETH/SOL) - candidato v1 de prueba forward"
+  ja: "暗号資産パーペチュアル レジーム・ロング (BTC/ETH/SOL) - v1 フォワードテスト候補"
+  vi: "Crypto Perp Regime Long (BTC/ETH/SOL) - ung vien forward-test v1"
+description: "Long-only breakout continuation on BTC, ETH and SOL USDT perpetuals with fixed 15 USDT risk per trade; shipped disarmed because it failed its own cost-sensitivity rule."
+description_i18n:
+  en: "Long-only breakout continuation on BTC, ETH and SOL USDT perpetuals with fixed 15 USDT risk per trade; shipped disarmed because it failed its own cost-sensitivity rule."
+  zh: "BTC、ETH、SOL USDT 永续的仅做多突破延续策略，单笔固定风险 15 USDT；因未通过自身成本敏感性规则，默认处于未启用状态。"
+  zh-tw: "BTC、ETH、SOL USDT 永續的僅做多突破延續策略，單筆固定風險 15 USDT；因未通過自身成本敏感性規則，預設為未啟用狀態。"
+  es: "Continuacion de ruptura solo largos en perpetuos USDT de BTC, ETH y SOL con riesgo fijo de 15 USDT por operacion; se entrega desarmado porque incumplio su propia regla de sensibilidad a costes."
+  ja: "BTC・ETH・SOL USDTパーペチュアルのロングオンリー・ブレイクアウト継続戦略。1取引あたりのリスクは15 USDT固定。自らのコスト感応度ルールに不合格のため、初期状態は無効です。"
+  vi: "Chien luoc breakout tiep dien chi mua tren hop dong vinh vien USDT cua BTC, ETH, SOL, rui ro co dinh 15 USDT moi lenh; mac dinh tat vi khong dat quy tac do nhay chi phi cua chinh no."
+long_description: |
+  This Playbook is a long-only breakout continuation strategy on the three
+  largest USDT perpetual markets: bitcoin, ether and solana. It captures the
+  idea that when a market that is already trending also expands its realised
+  volatility and pushes beyond its recent range, the move sometimes carries
+  further than a random walk would suggest. It never shorts, never averages
+  down, and holds at most one position across all three markets because they
+  move together.
+
+  It enters only when three conditions line up on hourly bars: trend strength
+  is high with positive directional pressure, volatility is expanding relative
+  to its own history, and price closes beyond the highest level of the
+  preceding sessions for the first time. The order is a resting limit order,
+  cancelled if not filled within a short window. Entries are suppressed around
+  funding settlement times, when spread or volume is poor, or when expected
+  funding cost would consume a meaningful share of the risk taken.
+
+  Every position is opened together with a protective stop sized from recent
+  average range, and a fixed reward target at a multiple of that risk. If
+  neither is hit, a time limit closes the position at market. Position size is
+  derived from the stop distance so that each losing trade costs the same
+  fixed amount of quote currency. Trading pauses after a bad day, stops after a
+  cumulative loss limit, and halts after a streak of losses, on stale data, or
+  if any position appears that this Playbook did not open.
+
+  Subscribers can tune leverage, margin budget and the arming switch. Higher
+  leverage does not change risk per trade because size comes from the stop
+  distance; it only changes margin used and how close liquidation sits to the
+  stop. Margin budget caps the margin any single position may use; trades that
+  would need more are skipped rather than shrunk. The arming switch is off by
+  default.
+
+  Be clear about the evidence. Offline testing did not show a statistically
+  reliable positive net edge, and the result turned negative when trading costs
+  were stressed. This version therefore ships disarmed and is a candidate for a
+  small forward test, not a validated strategy. It underperforms in sideways
+  markets, after sharp reversals following a breakout, and when costs rise.
+  Past results do not guarantee future returns, and you can lose the full
+  amount allocated.
+market_type: contract
+trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+tags: ["breakout", "long-only", "perpetual", "btc", "eth", "sol", "risk-first"]
+schedule:
+  cron: "*/15 * * * *"
+  tz: "UTC"
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+
+strategy_config:
+  trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+  leverage: 5
+  margin_budget: "500"
+  live_armed: false
+  risk_usdt: 15
+  atr_period: 14
+  stop_atr_mult: 1.5
+  tp_r_mult: 2.0
+  adx_period: 14
+  adx_trend_min: 30
+  adx_range_max: 20
+  atr_pct_window: 720
+  atr_pct_rank_min: 0.2
+  atr_pct_rank_max_mr: 0.8
+  ema_fast: 20
+  ema_mid: 50
+  ema_slow: 200
+  bb_period: 20
+  bb_std: 2.0
+  rsi_period: 14
+  rsi_mr_max: 35
+  enable_trend: false
+  enable_mr: false
+  enable_break: true
+  break_lookback: 48
+  break_rank_min: 0.5
+  htf_filter: false
+  htf_span: 1200
+  time_stop_hours_trend: 8
+  time_stop_hours_mr: 2
+  entry_cancel_hours: 4
+  max_concurrent: 3
+  funding_blackout_min: 15
+  funding_cap_r: 0.1
+  funding_rate_assumed: 0.0001
+  funding_interval_hours: 8
+  min_volume_24h_usdt: 10000000
+  max_spread_bps: 5
+  daily_pause_usdt: 30
+  stop_playbook_usdt: 40
+  max_consecutive_losses: 5
+  stale_seconds: 60
+  min_notional_usdt: 5
+  backtest_days: 730
+  contract_specs:
+    BTCUSDT: {tick: 0.1, step: 0.0001, min_qty: 0.0001}
+    ETHUSDT: {tick: 0.01, step: 0.01, min_qty: 0.01}
+    SOLUSDT: {tick: 0.001, step: 0.1, min_qty: 0.1}
+
+user_config_schema:
+  leverage:
+    type: integer
+    default: 5
+    min: 1
+    max: 5
+    aliases:
+      5x: 5
+      3x: 3
+    label: "Leverage (cap 5x)"
+  margin_budget:
+    type: string
+    default: "500"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Max margin per position (USDT)"
+  live_armed:
+    type: boolean
+    default: false
+    label: "Arm live trading (default off: v1 failed its cost-sensitivity rule)"

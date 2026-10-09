@@ -1,0 +1,326 @@
+{
+ "pulled_at_utc": "2026-10-09T18:29:25Z",
+ "symbols": {
+  "BTCUSDT": {
+   "contract": {
+    "symbol": "BTCUSDT",
+    "baseCoin": "BTC",
+    "quoteCoin": "USDT",
+    "buyLimitPriceRatio": "0.05",
+    "sellLimitPriceRatio": "0.05",
+    "feeRateUpRatio": "0.005",
+    "makerFeeRate": "0.0002",
+    "takerFeeRate": "0.0006",
+    "openCostUpRatio": "0.01",
+    "supportMarginCoins": [
+     "USDT"
+    ],
+    "minTradeNum": "0.0001",
+    "priceEndStep": "1",
+    "volumePlace": "4",
+    "pricePlace": "1",
+    "sizeMultiplier": "0.0001",
+    "symbolType": "perpetual",
+    "minTradeUSDT": "5",
+    "maxSymbolOrderNum": "200",
+    "maxProductOrderNum": "1000",
+    "maxPositionNum": "200",
+    "symbolStatus": "normal",
+    "offTime": "-1",
+    "limitOpenTime": "-1",
+    "deliveryTime": "",
+    "deliveryStartTime": "",
+    "deliveryPeriod": "",
+    "launchTime": "",
+    "fundInterval": "8",
+    "minLever": "1",
+    "maxLever": "150",
+    "posLimit": "0.2",
+    "maintainTime": "",
+    "openTime": "",
+    "maxMarketOrderQty": "220",
+    "maxOrderQty": "1200",
+    "isRwa": "NO"
+   },
+   "ticker": {
+    "symbol": "BTCUSDT",
+    "lastPr": "82462.9",
+    "askPr": "82463",
+    "bidPr": "82462.9",
+    "bidSz": "2.9423",
+    "askSz": "8.6393",
+    "high24h": "83500",
+    "low24h": "81302.9",
+    "ts": "1791570566019",
+    "change24h": "0.01283",
+    "baseVolume": "27389.3598",
+    "quoteVolume": "2259611812.41486",
+    "usdtVolume": "2259611812.41486",
+    "openUtc": "81726.1",
+    "changeUtc24h": "0.00902",
+    "indexPrice": "82509.872",
+    "fundingRate": "0.000068",
+    "holdingAmount": "33944.5302999999846",
+    "deliveryStartTime": null,
+    "deliveryTime": null,
+    "deliveryStatus": "",
+    "open24h": "81418.1",
+    "markPrice": "82463.1"
+   },
+   "fund": {
+    "symbol": "BTCUSDT",
+    "fundingRate": "0.000068",
+    "fundingRateInterval": "8",
+    "nextUpdate": "1791590400000",
+    "minFundingRate": "-0.003",
+    "maxFundingRate": "0.003"
+   },
+   "depth_top": {
+    "bids": [
+     [
+      82462.9,
+      2.9414
+     ],
+     [
+      82462.8,
+      0.0034
+     ],
+     [
+      82462.3,
+      0.0801
+     ]
+    ],
+    "asks": [
+     [
+      82463.0,
+      8.649
+     ],
+     [
+      82463.3,
+      0.0122
+     ],
+     [
+      82463.9,
+      0.1647
+     ]
+    ]
+   },
+   "spread_bps": 0.01212665809382526,
+   "spread_in_ticks": 1.0000000000582077
+  },
+  "ETHUSDT": {
+   "contract": {
+    "symbol": "ETHUSDT",
+    "baseCoin": "ETH",
+    "quoteCoin": "USDT",
+    "buyLimitPriceRatio": "0.05",
+    "sellLimitPriceRatio": "0.05",
+    "feeRateUpRatio": "0.005",
+    "makerFeeRate": "0.0002",
+    "takerFeeRate": "0.0006",
+    "openCostUpRatio": "0.01",
+    "supportMarginCoins": [
+     "USDT"
+    ],
+    "minTradeNum": "0.01",
+    "priceEndStep": "1",
+    "volumePlace": "2",
+    "pricePlace": "2",
+    "sizeMultiplier": "0.01",
+    "symbolType": "perpetual",
+    "minTradeUSDT": "5",
+    "maxSymbolOrderNum": "200",
+    "maxProductOrderNum": "1000",
+    "maxPositionNum": "200",
+    "symbolStatus": "normal",
+    "offTime": "-1",
+    "limitOpenTime": "-1",
+    "deliveryTime": "",
+    "deliveryStartTime": "",
+    "deliveryPeriod": "",
+    "launchTime": "",
+    "fundInterval": "8",
+    "minLever": "1",
+    "maxLever": "150",
+    "posLimit": "0.1",
+    "maintainTime": "",
+    "openTime": "",
+    "maxMarketOrderQty": "1900",
+    "maxOrderQty": "9900",
+    "isRwa": "NO"
+   },
+   "ticker": {
+    "symbol": "ETHUSDT",
+    "lastPr": "2482.77",
+    "askPr": "2482.81",
+    "bidPr": "2482.8",
+    "bidSz": "78.02",
+    "askSz": "3.27",
+    "high24h": "2520",
+    "low24h": "2435.01",
+    "ts": "1791570566848",
+    "change24h": "0.01805",
+    "baseVolume": "612677.01",
+    "quoteVolume": "1521702077.2921",
+    "usdtVolume": "1521702077.2921",
+    "openUtc": "2473.64",
+    "changeUtc24h": "0.00367",
+    "indexPrice": "2484.0685",
+    "fundingRate": "0.00001",
+    "holdingAmount": "778761.76999999952",
+    "deliveryStartTime": null,
+    "deliveryTime": null,
+    "deliveryStatus": "",
+    "open24h": "2438.74",
+    "markPrice": "2482.73"
+   },
+   "fund": {
+    "symbol": "ETHUSDT",
+    "fundingRate": "0.00001",
+    "fundingRateInterval": "8",
+    "nextUpdate": "1791590400000",
+    "minFundingRate": "-0.003",
+    "maxFundingRate": "0.003"
+   },
+   "depth_top": {
+    "bids": [
+     [
+      2482.8,
+      41.05
+     ],
+     [
+      2482.76,
+      0.26
+     ],
+     [
+      2482.75,
+      0.68
+     ]
+    ],
+    "asks": [
+     [
+      2482.81,
+      51.84
+     ],
+     [
+      2482.82,
+      0.2
+     ],
+     [
+      2482.86,
+      0.54
+     ]
+    ]
+   },
+   "spread_bps": 0.04027702537961512,
+   "spread_in_ticks": 0.9999999999763531
+  },
+  "SOLUSDT": {
+   "contract": {
+    "symbol": "SOLUSDT",
+    "baseCoin": "SOL",
+    "quoteCoin": "USDT",
+    "buyLimitPriceRatio": "0.07",
+    "sellLimitPriceRatio": "0.07",
+    "feeRateUpRatio": "0.005",
+    "makerFeeRate": "0.0002",
+    "takerFeeRate": "0.0006",
+    "openCostUpRatio": "0.01",
+    "supportMarginCoins": [
+     "USDT"
+    ],
+    "minTradeNum": "0.1",
+    "priceEndStep": "1",
+    "volumePlace": "1",
+    "pricePlace": "3",
+    "sizeMultiplier": "0.1",
+    "symbolType": "perpetual",
+    "minTradeUSDT": "5",
+    "maxSymbolOrderNum": "200",
+    "maxProductOrderNum": "1000",
+    "maxPositionNum": "200",
+    "symbolStatus": "normal",
+    "offTime": "-1",
+    "limitOpenTime": "-1",
+    "deliveryTime": "",
+    "deliveryStartTime": "",
+    "deliveryPeriod": "",
+    "launchTime": "",
+    "fundInterval": "8",
+    "minLever": "1",
+    "maxLever": "100",
+    "posLimit": "0.15",
+    "maintainTime": "",
+    "openTime": "",
+    "maxMarketOrderQty": "4400",
+    "maxOrderQty": "35000",
+    "isRwa": "NO"
+   },
+   "ticker": {
+    "symbol": "SOLUSDT",
+    "lastPr": "109.51",
+    "askPr": "109.511",
+    "bidPr": "109.51",
+    "bidSz": "240.8",
+    "askSz": "67.6",
+    "high24h": "112.025",
+    "low24h": "107.486",
+    "ts": "1791570567673",
+    "change24h": "0.01577",
+    "baseVolume": "2591681.6",
+    "quoteVolume": "284931160.4057",
+    "usdtVolume": "284931160.4057",
+    "openUtc": "109.559",
+    "changeUtc24h": "-0.00045",
+    "indexPrice": "109.571",
+    "fundingRate": "0.00007",
+    "holdingAmount": "4225209.59999995972",
+    "deliveryStartTime": null,
+    "deliveryTime": null,
+    "deliveryStatus": "",
+    "open24h": "107.81",
+    "markPrice": "109.51"
+   },
+   "fund": {
+    "symbol": "SOLUSDT",
+    "fundingRate": "0.00007",
+    "fundingRateInterval": "8",
+    "nextUpdate": "1791590400000",
+    "minFundingRate": "-0.00375",
+    "maxFundingRate": "0.00375"
+   },
+   "depth_top": {
+    "bids": [
+     [
+      109.51,
+      78.9
+     ],
+     [
+      109.505,
+      0.8
+     ],
+     [
+      109.503,
+      4.5
+     ]
+    ],
+    "asks": [
+     [
+      109.511,
+      54.0
+     ],
+     [
+      109.512,
+      0.2
+     ],
+     [
+      109.515,
+      0.1
+     ]
+    ]
+   },
+   "spread_bps": 0.09131544463686714,
+   "spread_in_ticks": 0.999999999990564
+  }
+ }
+}

@@ -1,0 +1,18 @@
+{
+ "engine_conservative_1x_ex_funding": {
+  "trades": 130,
+  "net_pnl": 72.92,
+  "pf": 1.083,
+  "net_expectancy_r": 0.038
+ },
+ "engine_nautilus_like_ex_funding": {
+  "trades": 131,
+  "net_pnl": 136.28,
+  "pf": 1.155,
+  "net_expectancy_r": 0.07
+ },
+ "nautilus_replay_raw": [
+  "positions 135 fills 270",
+  "net pnl (nautilus, incl commissions, no funding): 137.79 win rate 0.43 PF 1.154"
+ ]
+}
