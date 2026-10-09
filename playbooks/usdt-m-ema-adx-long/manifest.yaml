@@ -1,0 +1,122 @@
+name: usdt-m-ema-adx-long
+display_name: "USDT-M EMA ADX Long"
+display_name_i18n:
+  en: "USDT-M EMA ADX Long"
+  zh: "USDT本位均线趋势做多"
+  zh-tw: "USDT本位均線趨勢做多"
+  es: "Largo de tendencia USDT-M"
+  ja: "USDT建てトレンドのロング"
+  vi: "Long xu huong USDT-M"
+version: "1.0.0"
+description: "Long-only trend strategy for BTCUSDT, ETHUSDT, and SOLUSDT perpetuals."
+description_i18n:
+  en: "Long-only trend strategy for BTCUSDT, ETHUSDT, and SOLUSDT perpetuals."
+  zh: "仅做多的趋势策略，交易 BTCUSDT、ETHUSDT、SOLUSDT 永续合约。"
+  zh-tw: "僅做多的趨勢策略，交易 BTCUSDT、ETHUSDT、SOLUSDT 永續合約。"
+  es: "Estrategia de tendencia solo en largo para perpetuos BTCUSDT, ETHUSDT y SOLUSDT."
+  ja: "BTCUSDT、ETHUSDT、SOLUSDT の無期限でロングのみのトレンド戦略。"
+  vi: "Chien luoc xu huong chi long cho hop dong vinh vien BTCUSDT, ETHUSDT va SOLUSDT."
+long_description: |
+  This Playbook is a long-only trend-following strategy on USDT-margined perpetual futures for Bitcoin, Ether, and Solana. The thesis is that a market already moving, with trend strength confirmed and volatility in a normal band, is more likely to continue than to snap back. It aims to capture the middle of those uptrends and to sit out ranges, volatility spikes, and quiet tapes. It never sells short.
+  
+  Entry waits until several reads of the latest closed bar agree. A shorter moving average must cross above a longer moving average, buyer pressure must lead, and trend strength must show a real trend rather than a drift. Volatility must sit away from both a dead tape and a violent one. Volume on the signal bar must be elevated versus its recent average. The Playbook stays flat when funding is about to print or when funding would work against a new long. If any required input is missing, stale, or not a valid number, it does not enter. There is no default direction.
+  
+  The exit is attached with the entry, so the stop and the take profit travel with the order instead of being added after a fill. The stop is a volatility distance from the entry. The target is a fixed multiple of that initial risk. If neither is hit, a time stop closes the trade. New entries pause after a daily loss and stop after a deeper loss. It will not exceed its concurrency cap, will not stack two positions in one symbol, and will not touch a position it did not open.
+  
+  Subscribers can adjust leverage, margin budget, and which contracts stay enabled. Raising leverage magnifies gains and losses together and does not make entries more selective. If margin budget cannot fund the fixed loss at the leverage cap, the Playbook skips the trade. Narrowing the symbol list concentrates risk. A later version changes one frozen threshold only after a written prediction.
+  
+  The strategy underperforms when trends whipsaw, when breakouts fail immediately, and when funding stays elevated against longs. Gaps through the stop and a halt after consecutive losses can worsen results. Range-bound markets are unsuitable because the Playbook is built to stand aside. Costs, slippage, and funding belong in any result. Past results do not promise live profit. A real replay and a later live sample have to clear their gates before this is treated as validated.
+
+market_type: contract
+trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+output_kind: trade_strategy
+tags: ["trend", "ema", "adx", "btc", "eth", "sol", "perpetual", "long-only"]
+schedule:
+  cron: "5 * * * *"
+  tz: "Etc/UTC"
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+
+strategy_config:
+  trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+  leverage: 5
+  max_leverage: 5
+  margin_budget: "3000"
+  fixed_loss_usdt: 15
+  adx_period: 14
+  adx_min: 25
+  atr_period: 14
+  atr_stop_mult: 1.5
+  atr_pct_lookback: 720
+  atr_pct_low: 20
+  atr_pct_high: 80
+  ema_fast: 20
+  ema_slow: 50
+  volume_mult: 1.5
+  volume_avg_bars: 20
+  bar_hours: 1
+  limit_timeout_hours: 4
+  time_stop_hours: 8
+  reward_r: 2
+  max_concurrent: 3
+  funding_blackout_minutes: 15
+  funding_against_max: 0.0003
+  daily_pause_usdt: -30
+  playbook_stop_usdt: -40
+  max_consecutive_losses: 5
+  stale_ticker_seconds: 60
+  maker_fee: 0.0002
+  taker_fee: 0.0006
+  slippage_ticks: 1
+  min_notional_usdt: 5
+  shorts_enabled: false
+  walk_forward_split: "2026-04-09T00:00:00Z"
+  backtest_start: "2024-10-09T00:00:00Z"
+  backtest_end: "2026-10-09T00:00:00Z"
+  fee_tier_status: "PENDING"
+  version_label: "v1"
+  price_tick:
+    BTCUSDT: "0.1"
+    ETHUSDT: "0.01"
+    SOLUSDT: "0.001"
+  size_step:
+    BTCUSDT: "0.0001"
+    ETHUSDT: "0.01"
+    SOLUSDT: "0.1"
+  min_qty:
+    BTCUSDT: "0.0001"
+    ETHUSDT: "0.01"
+    SOLUSDT: "0.1"
+
+user_config_schema:
+  trading_symbols:
+    type: array
+    item_type: string
+    default: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    options: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    aliases:
+      btc: BTCUSDT
+      bitcoin: BTCUSDT
+      eth: ETHUSDT
+      ethereum: ETHUSDT
+      sol: SOLUSDT
+      solana: SOLUSDT
+    min_items: 1
+    max_items: 3
+    label: "Trading symbols"
+  leverage:
+    type: integer
+    default: 5
+    min: 1
+    max: 5
+    aliases:
+      5x: 5
+    label: "Leverage"
+  margin_budget:
+    type: string
+    default: "3000"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Margin budget USDT"

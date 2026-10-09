@@ -1,2 +1,7 @@
 # Local update-check cache written by .claude/skills/getagent/scripts/version_check.sh
 .claude/skills/getagent/.env
+__pycache__/
+*.pyc
+output/
+.state/
+.env
