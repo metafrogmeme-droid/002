@@ -1,0 +1,142 @@
+name: crypto-majors-trend-pullback
+version: "1.0.0"
+display_name: "Crypto Majors Trend Pullback (BTC/ETH/SOL Perps, Long-Only)"
+display_name_i18n:
+  en: "Crypto Majors Trend Pullback (BTC/ETH/SOL Perps, Long-Only)"
+  zh: "主流币趋势回调做多（BTC/ETH/SOL 永续）"
+  zh-tw: "主流幣趨勢回調做多（BTC/ETH/SOL 永續）"
+  es: "Retroceso en tendencia de criptos principales (perpetuos BTC/ETH/SOL, solo largos)"
+  ja: "主要暗号資産トレンド押し目買い（BTC/ETH/SOL 無期限、ロングのみ）"
+  vi: "Mua hồi trong xu hướng tiền mã hóa chính (hợp đồng vĩnh cửu BTC/ETH/SOL, chỉ Long)"
+description: "Long-only, fixed-risk trend-pullback limit entries on BTC, ETH and SOL USDT perpetuals with attached stop and fixed target"
+description_i18n:
+  en: "Long-only, fixed-risk trend-pullback limit entries on BTC, ETH and SOL USDT perpetuals with attached stop and fixed target"
+  zh: "BTC、ETH、SOL USDT 永续合约只做多的固定风险趋势回调限价入场，附带止损与固定止盈"
+  zh-tw: "BTC、ETH、SOL USDT 永續合約只做多的固定風險趨勢回調限價進場，附帶停損與固定停利"
+  es: "Entradas límite de solo largos con riesgo fijo en retrocesos de tendencia en perpetuos USDT de BTC, ETH y SOL, con stop y objetivo fijo adjuntos"
+  ja: "BTC・ETH・SOL USDT無期限契約で、固定リスクのトレンド押し目指値ロングのみ。損切りと固定利確を同時設定"
+  vi: "Lệnh giới hạn chỉ Long, rủi ro cố định, mua hồi trong xu hướng trên hợp đồng vĩnh cửu USDT BTC, ETH, SOL, kèm cắt lỗ và chốt lời cố định"
+long_description: |
+  This Playbook is a long-only trend-following strategy on the three most liquid
+  crypto perpetual contracts: bitcoin, ether and solana. Its thesis is that when
+  a major coin is already in a confirmed hourly uptrend, short pullbacks inside
+  that trend are more likely to resume upward than to reverse. It aims to buy
+  those pullbacks with a resting limit order rather than chase strength, and it
+  treats every trade as a fixed amount of risk measured in dollars, so position
+  size shrinks when the market is volatile and grows when it is calm.
+
+  The strategy only looks to enter long when trend strength is clearly
+  elevated, the positive directional reading leads the negative one, and price
+  sits above its rising medium-term average. Volatility must sit in a normal
+  band relative to the recent month. It also skips entries near funding
+  settlements, when expected funding is costly, or when liquidity is thin.
+  Only one position is held at a time because the three coins move together.
+
+  Every entry order carries its stop loss and take profit from the moment it is
+  placed. The stop sits a volatility-scaled distance below the entry and the
+  take profit sits at a fixed multiple of that risk above it. A resting entry
+  that does not fill within a few hours is cancelled. An open trade that has
+  reached neither level is closed by a time stop. Daily loss limits, a losing
+  streak limit, stale data, or any position the Playbook did not open will
+  pause or halt new entries.
+
+  Subscribers can adjust three parameters. Leverage only changes how much
+  isolated margin each position locks; because size comes from the fixed
+  dollar risk, higher leverage does not increase the loss at the stop. Margin
+  budget is the capital cap used to size margin and to compute return
+  percentage. The symbol list lets you narrow the universe to fewer coins,
+  which lowers trade count and slows the evidence needed for a verdict.
+
+  The main risk is that trend pullbacks keep falling: choppy, range-bound
+  markets produce strings of small losses, and fast gaps can fill a stop well
+  beyond its level. Fees, slippage and funding are charged in every backtest
+  figure, but live fills and funding can be worse. Past backtest results do not
+  guarantee live profitability, and this Playbook is unsuitable for anyone who
+  cannot tolerate a run of consecutive losing trades.
+market_type: contract
+trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+tags: ["trend", "pullback", "long-only", "btc", "eth", "sol", "contract", "fixed-risk"]
+schedule:
+  cron: "16 * * * *"
+  tz: "UTC"
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+
+strategy_config:
+  trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+  leverage: 5
+  margin_budget: "1000"
+  risk_per_trade_usdt: 15
+  atr_period: 14
+  adx_period: 14
+  ema_fast: 20
+  ema_slow: 50
+  atr_rank_window_bars: 720
+  adx_min: 25
+  atr_rank_min: 20
+  atr_rank_max: 90
+  pullback_atr: 0.5
+  stop_atr: 1.5
+  take_profit_r: 2.0
+  entry_ttl_hours: 4
+  time_stop_hours: 8
+  min_quote_volume_usd_m: 100
+  max_spread_bps: 5
+  funding_interval_hours: 8
+  funding_blackout_minutes: 15
+  max_funding_r: 0.1
+  daily_pause_loss_usdt: 30
+  daily_stop_loss_usdt: 40
+  max_consecutive_losses: 5
+  max_data_age_seconds: 60
+  max_concurrent_positions: 1
+  slippage_ticks: 1
+  maker_fee: "0.0002"
+  taker_fee: "0.0006"
+  margin_mode: "isolated"
+  backtest:
+    fetch_start_ym: [2024, 8]
+    start_ym: [2024, 10]
+    end_ym: [2026, 10]
+    oos_start_ym: [2025, 10]
+    oos_split_label: "2025-10-01"
+    funding_interval: "4h"
+    walk_forward_folds:
+      - {name: "F1", start_ym: [2024, 10], end_ym: [2025, 4]}
+      - {name: "F2", start_ym: [2025, 4], end_ym: [2025, 10]}
+      - {name: "F3", start_ym: [2025, 10], end_ym: [2026, 4]}
+      - {name: "F4", start_ym: [2026, 4], end_ym: [2026, 10]}
+
+user_config_schema:
+  trading_symbols:
+    type: array
+    item_type: string
+    default: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    options: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+    aliases:
+      btc: BTCUSDT
+      bitcoin: BTCUSDT
+      eth: ETHUSDT
+      ethereum: ETHUSDT
+      sol: SOLUSDT
+      solana: SOLUSDT
+    min_items: 1
+    max_items: 3
+    label: "Trading symbols"
+  leverage:
+    type: integer
+    default: 5
+    min: 1
+    max: 5
+    aliases:
+      3x: 3
+      5x: 5
+    label: "Leverage (isolated, cap 5x)"
+  margin_budget:
+    type: string
+    default: "1000"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Margin budget USDT"

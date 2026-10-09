@@ -1,2 +1,8 @@
 # Local update-check cache written by .claude/skills/getagent/scripts/version_check.sh
 .claude/skills/getagent/.env
+
+# Local research artifacts
+research/data/
+research/out/
+__pycache__/
+*.tar.gz
