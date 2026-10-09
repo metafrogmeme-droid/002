@@ -19,7 +19,7 @@ class SolNetExpectancyConfig(StrategyConfig):
     atr_period: int = 14
     atr_stop_multiple: str = "1.5"
     adx_period: int = 14
-    adx_min: str = "15"
+    adx_min: str = "20"
     adx_max: str = "35"
     rsi_period: int = 14
     rsi_recovery_level: str = "40"
