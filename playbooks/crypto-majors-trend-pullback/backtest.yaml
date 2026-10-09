@@ -61,13 +61,3 @@ instruments:
     maker_fee: "0.0002"
     taker_fee: "0.0006"
     bar_type: SOLUSDT.BITGET-1-HOUR-LAST-EXTERNAL
-
-data_requirements:
-  required_bar_fields:
-    - ema_fast
-    - ema_slow
-    - atr
-    - adx
-    - plus_di
-    - minus_di
-    - atr_pct_rank

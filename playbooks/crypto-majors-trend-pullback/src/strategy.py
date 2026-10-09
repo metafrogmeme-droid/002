@@ -3,15 +3,22 @@
 One cluster slot (crypto majors) -> at most one pending entry or one open
 position across all instruments at any time. Decisions are made once per bar
 timestamp after every instrument has reported, choosing the strongest ADX
-candidate. Indicators come from injected feature frames built by
-``features.compute_indicators`` so replay and live share one code path.
+candidate.
+
+The platform re-executes this class on raw OHLCV bars to produce the official
+order/fill/position evidence, so every indicator is computed bar-by-bar inside
+the strategy (``features.IncrementalIndicators``, parity-tested against the
+vectorised ``compute_indicators`` the live path uses). Funding history is the
+only external input: injected frame -> sidecar written by main_backtest ->
+direct SDK fetch -> unknown (gate off, reported).
 """
 import json
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+import numpy as np
 import pandas as pd
 from nautilus_trader.config import StrategyConfig
 from nautilus_trader.model.data import Bar, BarType
@@ -22,13 +29,15 @@ from nautilus_trader.trading.strategy import Strategy
 
 try:  # the replay engine may import this module as top-level ``strategy``
     from .rules import EntryPlan, InstrumentRules, Reason, RiskState, build_entry_plan
+    from .features import IncrementalIndicators, fetch_funding_window
 except ImportError:  # pragma: no cover - depends on how the runner imports src/**
     from rules import EntryPlan, InstrumentRules, Reason, RiskState, build_entry_plan
+    from features import IncrementalIndicators, fetch_funding_window
 
 HOUR_NS = 3_600_000_000_000
 REPLAY_STATE_PATH = Path("/workspace/output/_replay_state.json")
 FEATURE_SIDECAR_DIR = Path("/workspace/output/_features")
-REQUIRED_FEATURES = ("close", "ema_fast", "ema_slow", "atr", "adx", "plus_di", "minus_di", "atr_pct_rank")
+FUNDING_FETCH_BUDGET_SECONDS = 25.0
 
 
 class TrendPullbackConfig(StrategyConfig):
@@ -49,10 +58,14 @@ class TrendPullbackStrategy(Strategy):
         self.params: dict[str, Any] = json.loads(config.params_json or "{}")
         self._rules_raw: dict[str, Any] = json.loads(config.instrument_rules_json or "{}")
         self.feature_frames: dict[str, pd.DataFrame] = {}
-        self._feature_lookup: dict[str, dict[int, dict[str, Any]]] = {}
+        self._indicators: dict[str, IncrementalIndicators] = {}
+        # symbol -> (sorted settlement ts_ns array, rate array) for as-of lookup
+        self._funding: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         self._instruments: dict[str, Instrument] = {}
         self._bar_types: list[BarType] = []
-        self._ts_is_close_time: Optional[bool] = None
+        # BarDataWrangler stamps bars with the frame index; getagent frames are
+        # indexed by bar open time, so decision time = ts_event + 1h by default.
+        self._ts_is_close_time: bool = bool(self.params.get("bar_ts_is_close_time", False))
 
         self._bucket_ts: Optional[int] = None
         self._bucket: dict[str, tuple[Bar, dict[str, Any]]] = {}
@@ -64,45 +77,80 @@ class TrendPullbackStrategy(Strategy):
         self.skip_counts: dict[str, int] = {}
         self.bars_seen = 0
         self.funding_known = False
+        self.funding_source = "none"
 
     # ------------------------------------------------------------------ setup
     def set_feature_frames(self, feature_frames: dict[str, pd.DataFrame]) -> None:
         self.feature_frames = dict(feature_frames or {})
 
-    def _index_features(self) -> None:
-        for key, frame in self.feature_frames.items():
-            symbol = key.split(".", 1)[0]
-            if "funding_rate" in frame.columns and frame["funding_rate"].notna().any():
-                self.funding_known = True
-            lookup: dict[int, dict[str, Any]] = {}
-            records = frame.to_dict("index")
-            for ts, row in records.items():
-                lookup[int(pd.Timestamp(ts).value)] = row
-            self._feature_lookup[symbol] = lookup
-
-    def _load_feature_sidecars(self) -> dict[str, pd.DataFrame]:
-        """Fallback when the engine does not inject full feature frames.
-
-        main_backtest writes one JSON sidecar per symbol with the indicator
-        columns computed by features.compute_indicators on the same bars.
-        """
-        frames: dict[str, pd.DataFrame] = {}
-        if not FEATURE_SIDECAR_DIR.exists():
-            return frames
-        for path in FEATURE_SIDECAR_DIR.glob("*.json"):
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            frame = pd.DataFrame(payload["columns"])
-            frame.index = pd.to_datetime(payload["ts_ns"], utc=True)
-            frames[path.stem] = frame
-        return frames
-
-    def _features_complete(self) -> bool:
-        if not self.feature_frames:
+    def _ingest_funding_frame(self, symbol: str, frame: pd.DataFrame) -> bool:
+        if frame is None or "funding_rate" not in frame.columns:
             return False
-        for frame in self.feature_frames.values():
-            if any(col not in frame.columns for col in REQUIRED_FEATURES):
-                return False
+        series = frame["funding_rate"].astype(float).dropna().sort_index()
+        series = series[~series.index.duplicated(keep="last")]
+        if series.empty:
+            return False
+        self._funding[symbol] = (
+            np.asarray([int(pd.Timestamp(ts).value) for ts in series.index], dtype=np.int64),
+            np.asarray(series.values, dtype=float),
+        )
         return True
+
+    def _load_funding_sidecars(self) -> bool:
+        """main_backtest writes one JSON sidecar per symbol: {"ts_ns": [...], "funding_rate": [...]}."""
+        if not FEATURE_SIDECAR_DIR.exists():
+            return False
+        loaded = False
+        for path in FEATURE_SIDECAR_DIR.glob("*.json"):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                rates = payload.get("funding_rate") or (payload.get("columns") or {}).get("funding_rate")
+                frame = pd.DataFrame({"funding_rate": rates}, index=pd.to_datetime(payload["ts_ns"], utc=True))
+            except Exception:  # noqa: BLE001 - malformed sidecar is treated as absent
+                continue
+            loaded = self._ingest_funding_frame(path.stem, frame) or loaded
+        return loaded
+
+    def _fetch_funding_direct(self, symbols: list[str]) -> bool:
+        """Last resort inside the platform re-run: pull funding history via the SDK."""
+        now = datetime.now(timezone.utc)
+        days = int(self.params.get("backtest_days", 730)) + int(self.params.get("warmup_days", 45))
+        deadline = now + timedelta(seconds=FUNDING_FETCH_BUDGET_SECONDS)
+        loaded = False
+        for symbol in symbols:
+            if datetime.now(timezone.utc) >= deadline:
+                break
+            try:
+                frame, _report = fetch_funding_window(
+                    symbol,
+                    exchange=str(self.params.get("data_exchange", "bitget")),
+                    start=now - timedelta(days=days),
+                    end=now,
+                    deadline=deadline,
+                )
+            except Exception:  # noqa: BLE001 - degrade to funding-unknown, never crash the replay
+                continue
+            loaded = self._ingest_funding_frame(symbol, frame) or loaded
+        return loaded
+
+    def _resolve_funding(self, symbols: list[str]) -> None:
+        injected = False
+        for key, frame in self.feature_frames.items():
+            injected = self._ingest_funding_frame(key.split(".", 1)[0], frame) or injected
+        if injected:
+            self.funding_source = "injected"
+        elif self._load_funding_sidecars():
+            self.funding_source = "sidecar"
+        elif self._fetch_funding_direct(symbols):
+            self.funding_source = "sdk"
+        self.funding_known = all(sym in self._funding for sym in symbols) and bool(symbols)
+
+    def _funding_at(self, symbol: str, ts_ns: int) -> Optional[float]:
+        table = self._funding.get(symbol)
+        if not table:
+            return None
+        idx = int(np.searchsorted(table[0], ts_ns, side="right")) - 1
+        return float(table[1][idx]) if idx >= 0 else None
 
     def on_start(self) -> None:
         instrument_ids = [
@@ -130,13 +178,8 @@ class TrendPullbackStrategy(Strategy):
             if instrument is None:
                 raise RuntimeError(f"instrument {iid} missing from cache")
             self._instruments[iid.symbol.value] = instrument
-        if not self._features_complete():
-            sidecars = self._load_feature_sidecars()
-            if sidecars:
-                self.feature_frames = {f"{sym}.{instrument_ids[0].venue.value}": f for sym, f in sidecars.items()}
-        if not self._features_complete():
-            raise RuntimeError("indicator feature frames unavailable (no injection, no sidecar) -> no trade")
-        self._index_features()
+            self._indicators[iid.symbol.value] = IncrementalIndicators(self.params)
+        self._resolve_funding(list(self._instruments))
         self._bar_types = bar_types
         for bar_type in bar_types:
             self.subscribe_bars(bar_type)
@@ -154,17 +197,16 @@ class TrendPullbackStrategy(Strategy):
             size_precision=int(raw.get("size_precision", instrument.size_precision)),
         )
 
-    def _lookup_row(self, symbol: str, ts_event: int) -> Optional[dict[str, Any]]:
-        table = self._feature_lookup.get(symbol) or {}
-        if self._ts_is_close_time is None:
-            if ts_event in table:
-                self._ts_is_close_time = False
-            elif (ts_event - HOUR_NS) in table:
-                self._ts_is_close_time = True
-            else:
-                return None
-        key = ts_event - HOUR_NS if self._ts_is_close_time else ts_event
-        return table.get(key)
+    def _feature_row(self, symbol: str, bar: Bar) -> dict[str, Any]:
+        row = self._indicators[symbol].update(
+            float(bar.high.as_double()), float(bar.low.as_double()), float(bar.close.as_double())
+        )
+        row["open"] = float(bar.open.as_double())
+        row["volume"] = float(bar.volume.as_double())
+        # Funding known at the bar's open (as-of), never a later settlement.
+        open_ns = bar.ts_event - HOUR_NS if self._ts_is_close_time else bar.ts_event
+        row["funding_rate"] = self._funding_at(symbol, open_ns)
+        return row
 
     def _decision_time(self, ts_event: int) -> datetime:
         close_ns = ts_event if self._ts_is_close_time else ts_event + HOUR_NS
@@ -181,15 +223,12 @@ class TrendPullbackStrategy(Strategy):
     def on_bar(self, bar: Bar) -> None:
         self.bars_seen += 1
         symbol = bar.bar_type.instrument_id.symbol.value
-        row = self._lookup_row(symbol, bar.ts_event)
+        row = self._feature_row(symbol, bar)
         if self._bucket_ts is not None and bar.ts_event != self._bucket_ts:
             self._decide(self._bucket_ts)
             self._bucket = {}
         self._bucket_ts = bar.ts_event
-        if row is not None:
-            self._bucket[symbol] = (bar, row)
-        else:
-            self._skip(Reason.SIGNAL_INVALID)
+        self._bucket[symbol] = (bar, row)
         if len(self._bucket) == len(self._instruments):
             self._decide(bar.ts_event)
             self._bucket = {}
@@ -494,6 +533,7 @@ class TrendPullbackStrategy(Strategy):
             "risk_state": self.risk.to_dict(),
             "bars_seen": self.bars_seen,
             "funding_known": self.funding_known,
+            "funding_source": self.funding_source,
             "ts_is_close_time": self._ts_is_close_time,
             "unresolved_slot": open_slot,
         }

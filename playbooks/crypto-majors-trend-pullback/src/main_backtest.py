@@ -17,30 +17,41 @@ from getagent import backtest, runtime
 
 from . import features, reporting
 from .rules import Reason, instrument_rules_from_spec
-from .strategy import FEATURE_SIDECAR_DIR, REPLAY_STATE_PATH, REQUIRED_FEATURES
+from .strategy import FEATURE_SIDECAR_DIR, REPLAY_STATE_PATH
 
 OUTPUT_DIR = Path("/workspace/output")
+# The platform's artifact collector reads <package>/output; mirror there when distinct.
+PACKAGE_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "output"
 VENUE = "BITGET"
-SIDECAR_COLUMNS = tuple(c for c in REQUIRED_FEATURES if c != "close") + ("close", "funding_rate")
+OHLCV = ("open", "high", "low", "close", "volume")
 
 
-def _write_feature_sidecars(frames: dict[str, pd.DataFrame]) -> None:
+def _write_funding_sidecars(funding_frames: dict[str, pd.DataFrame]) -> None:
+    """Persist raw settlement-level funding so the platform's re-run of the
+    strategy class (raw OHLCV only) sees the same funding history we did."""
     FEATURE_SIDECAR_DIR.mkdir(parents=True, exist_ok=True)
-    for symbol, frame in frames.items():
-        cols = [c for c in SIDECAR_COLUMNS if c in frame.columns]
+    for path in FEATURE_SIDECAR_DIR.glob("*.json"):
+        path.unlink()
+    for symbol, frame in funding_frames.items():
+        if frame is None or frame.empty or "funding_rate" not in frame.columns:
+            continue
+        series = frame["funding_rate"].astype(float).dropna()
         payload = {
-            "ts_ns": [int(ts.value) for ts in frame.index],
-            "columns": {c: [None if pd.isna(v) else float(v) for v in frame[c].tolist()] for c in cols},
+            "ts_ns": [int(ts.value) for ts in series.index],
+            "funding_rate": [float(v) for v in series.tolist()],
         }
         (FEATURE_SIDECAR_DIR / f"{symbol}.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
-def _remove_feature_sidecars() -> None:
-    if not FEATURE_SIDECAR_DIR.exists():
-        return
-    for path in FEATURE_SIDECAR_DIR.glob("*.json"):
-        path.unlink()
-    FEATURE_SIDECAR_DIR.rmdir()
+def _write_artifact(name: str, text: str) -> None:
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUTPUT_DIR / name).write_text(text, encoding="utf-8")
+    try:
+        if PACKAGE_OUTPUT_DIR.resolve() != OUTPUT_DIR.resolve():
+            PACKAGE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            (PACKAGE_OUTPUT_DIR / name).write_text(text, encoding="utf-8")
+    except OSError:
+        pass  # mirror is best-effort; /workspace/output is the documented location
 
 
 def _params() -> dict[str, Any]:
@@ -74,9 +85,11 @@ def run() -> None:
     fetch_start = window_start - timedelta(days=warmup_days)
 
     frames: dict[str, pd.DataFrame] = {}
+    funding_frames: dict[str, pd.DataFrame] = {}
     coverage: dict[str, Any] = {"bars": {}, "funding": {}}
     rules_json: dict[str, Any] = {}
     ticks: dict[str, float] = {}
+    parity: dict[str, Any] | None = None
     for index, symbol in enumerate(symbols):
         if symbol not in inst_specs:
             coverage["bars"][symbol] = {"error": "symbol not declared in backtest.yaml"}
@@ -89,6 +102,7 @@ def run() -> None:
             symbol, exchange=exchange, start=fetch_start, end=window_end, deadline=deadline
         )
         coverage["funding"][symbol] = funding_report
+        funding_frames[symbol] = funding
         bars, bar_report = features.fetch_klines_window(
             symbol, exchange=exchange, start=fetch_start, end=window_end, deadline=deadline
         )
@@ -96,6 +110,9 @@ def run() -> None:
         if bars.empty or len(bars) < int(params["ema_slow_period"]) + 50:
             coverage["bars"][symbol]["dropped"] = "insufficient bars"
             continue
+        if parity is None:
+            # Prove the in-strategy incremental indicators equal the vectorised live-path ones.
+            parity = features.indicator_parity(bars, params)
         frame = features.build_replay_frame(bars, funding, params)
         frame = frame[frame.index >= pd.Timestamp(max(window_start, bars.index.min().to_pydatetime()))]
         frames[symbol] = frame
@@ -134,14 +151,15 @@ def run() -> None:
 
     if REPLAY_STATE_PATH.exists():
         REPLAY_STATE_PATH.unlink()
-    _write_feature_sidecars(frames)
-    try:
-        result = backtest.run(
-            ohlcv_data={f"{symbol}.{VENUE}": frame for symbol, frame in frames.items()},
-            spec=spec,
-        )
-    finally:
-        _remove_feature_sidecars()
+    # Sidecars stay on disk on purpose: the platform's own re-run of the strategy
+    # class picks them up so official evidence and this report share one funding history.
+    _write_funding_sidecars(funding_frames)
+    # Feed the engine raw OHLCV only -- identical input to the platform re-run; the
+    # strategy derives every indicator itself.
+    result = backtest.run(
+        ohlcv_data={f"{symbol}.{VENUE}": frame[list(OHLCV)] for symbol, frame in frames.items()},
+        spec=spec,
+    )
     chart_path = backtest.generate_chart(result)
 
     state: dict[str, Any] = {}
@@ -225,10 +243,11 @@ def run() -> None:
         "forward_criteria": forward_criteria,
         "bars_seen": state.get("bars_seen"),
         "ts_is_close_time": state.get("ts_is_close_time"),
+        "funding_source_in_replay": state.get("funding_source"),
+        "indicator_parity_incremental_vs_vectorised": parity,
         "elapsed_seconds": round((features.utc_now() - started).total_seconds(), 2),
     }
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     raw = dict(result.raw or {})
     raw.pop("equity_curve", None)
     if isinstance(raw.get("reports"), dict):
@@ -238,13 +257,11 @@ def run() -> None:
     raw["max_drawdown_pct"] = head["max_drawdown_pct_of_budget"]
     raw["starting_balance"] = margin_budget
     raw["metrics_basis_note"] = "net_pnl is net of engine fees + modelled slippage + funding (1x); denominator margin_budget"
-    (OUTPUT_DIR / "backtest_report.json").write_text(json.dumps(reporting.sanitize(raw), default=str), encoding="utf-8")
-    (OUTPUT_DIR / "equity_curve.csv").write_text(
-        "\n".join(reporting.curve_to_csv_lines(curve, margin_budget)) + "\n", encoding="utf-8"
-    )
-    (OUTPUT_DIR / "trade_ledger.json").write_text(json.dumps(reporting.sanitize(trades), default=str), encoding="utf-8")
-    (OUTPUT_DIR / "action_log.json").write_text(json.dumps(reporting.sanitize(state.get("action_log", [])), default=str), encoding="utf-8")
-    (OUTPUT_DIR / "validation_report.json").write_text(json.dumps(reporting.sanitize(validation), default=str), encoding="utf-8")
+    _write_artifact("backtest_report.json", json.dumps(reporting.sanitize(raw), default=str))
+    _write_artifact("equity_curve.csv", "\n".join(reporting.curve_to_csv_lines(curve, margin_budget)) + "\n")
+    _write_artifact("trade_ledger.json", json.dumps(reporting.sanitize(trades), default=str))
+    _write_artifact("action_log.json", json.dumps(reporting.sanitize(state.get("action_log", [])), default=str))
+    _write_artifact("validation_report.json", json.dumps(reporting.sanitize(validation), default=str))
 
     def _f(value: Any) -> Any:
         try:
