@@ -1,0 +1,114 @@
+name: isolated-usdt-ema-adx
+display_name: "BTC ETH SOL Isolated EMA-ADX"
+display_name_i18n:
+  en: "BTC ETH SOL Isolated EMA-ADX"
+  zh: "BTC ETH SOL 逐仓 EMA-ADX"
+  zh-tw: "BTC ETH SOL 逐倉 EMA-ADX"
+  es: "EMA-ADX aislado de BTC ETH SOL"
+  ja: "BTC ETH SOL 分離 EMA-ADX"
+  vi: "EMA-ADX ký quỹ riêng BTC ETH SOL"
+description: "Long-only hourly trend Playbook for BTCUSDT, ETHUSDT, and SOLUSDT with volatility-regime and volume gates"
+description_i18n:
+  en: "Long-only hourly trend Playbook for BTCUSDT, ETHUSDT, and SOLUSDT with volatility-regime and volume gates"
+  zh: "仅做多的小时趋势策略，覆盖 BTCUSDT、ETHUSDT 和 SOLUSDT，并采用波动率状态与成交量过滤"
+  zh-tw: "僅做多的小時趨勢策略，涵蓋 BTCUSDT、ETHUSDT 和 SOLUSDT，並採用波動率狀態與成交量過濾"
+  es: "Estrategia de tendencia horaria solo larga para BTCUSDT, ETHUSDT y SOLUSDT con filtros de volatilidad y volumen"
+  ja: "BTCUSDT、ETHUSDT、SOLUSDT向けのロング限定時間足トレンド戦略。ボラティリティと出来高で選別"
+  vi: "Chiến lược xu hướng theo giờ chỉ mua cho BTCUSDT, ETHUSDT và SOLUSDT với bộ lọc biến động và khối lượng"
+long_description: |
+  This Playbook is a long-only trend-following strategy for a tightly limited
+  group of liquid perpetual markets. It aims to capture sustained upward price
+  movement after directional strength has become observable, while refusing
+  bearish exposure. Its thesis is that momentum is more dependable when trend
+  direction, trend strength, market activity, and a suitable volatility regime
+  agree. It deliberately sits out quiet ranges, weak trends, and disorderly
+  volatility rather than treating continuous market participation as a goal.
+
+  The strategy enters long only when the faster trend measure is above the
+  slower trend measure, price confirms the faster trend, directional strength
+  passes its gate, volatility is neither dormant nor extreme, and trading
+  volume confirms participation. A fresh upward trigger is required. Missing,
+  stale, invalid, or ambiguous inputs produce a hold decision, never a guessed
+  direction. Short entries are disabled, so bearish conditions cannot silently
+  become an opposite trade.
+
+  Every accepted entry has a protective stop tied to current volatility and a
+  take profit tied to the initial trade risk. A time exit prevents a trend
+  position from lingering after momentum has failed to deliver. Trend failure
+  can also close a position. Position size is derived from a fixed loss budget
+  and the stop distance, then constrained by exchange precision and leverage.
+  Portfolio and session circuit breakers suspend new entries after adverse
+  outcomes.
+
+  Subscriber-tunable parameters are limited to leverage and margin budget.
+  Raising leverage increases capital efficiency but also liquidation and
+  execution risk; it does not increase the strategy's loss budget or make a
+  weak setup acceptable. Raising margin budget provides more collateral
+  capacity for correctly risk-sized positions, while lowering it can cause
+  otherwise valid setups to be rejected when exchange minimums or margin
+  constraints cannot be met.
+
+  The main risks are price gaps, stop slippage, exchange outages, changing fee
+  tiers, adverse funding, and trend signals that reverse in choppy markets.
+  Correlated assets can lose together even when each symbol passes its own
+  filter. The strategy may underperform during broad declines, violent
+  reversals, low-liquidity episodes, or prolonged ranges. Historical backtest
+  evidence does not guarantee live profitability, and unsuitable or incomplete
+  data must be treated as a reason not to trade.
+market_type: contract
+trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+output_kind: trade_strategy
+tags: ["trend", "ema", "adx", "long-only", "contract", "risk-sized"]
+schedule:
+  cron: "5 * * * *"
+  tz: "UTC"
+decision_mode: deterministic
+backtest_support: full
+runtime_profile: deterministic
+execution_mode: follow_trade
+follow_trade_supported: true
+
+strategy_config:
+  trading_symbols: ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+  entry_interval: "1h"
+  fast_ema_period: 20
+  slow_ema_period: 50
+  adx_period: 14
+  adx_minimum: 25
+  atr_period: 14
+  atr_percentile_lookback: 252
+  atr_percentile_minimum: 20
+  atr_percentile_maximum: 80
+  volume_average_period: 20
+  volume_multiplier: 1.5
+  stop_atr_multiplier: 1.5
+  take_profit_r: 2.0
+  risk_usdt: 15
+  time_stop_hours: 8
+  entry_cancel_hours: 4
+  leverage: 3
+  margin_budget: "300"
+  max_concurrent_positions: 3
+  max_positions_per_symbol: 1
+  daily_entry_pause_usdt: 30
+  daily_stop_usdt: 40
+  consecutive_loss_halt: 5
+  stale_data_seconds: 60
+  maker_fee: 0.0002
+  taker_fee: 0.0006
+  slippage_ticks: 1
+  short_enabled: false
+  live_execution_gate: false
+
+user_config_schema:
+  leverage:
+    type: integer
+    default: 3
+    min: 1
+    max: 5
+    label: "Isolated leverage"
+  margin_budget:
+    type: string
+    default: "300"
+    pattern: "^[0-9]+(\\.[0-9]+)?$"
+    label: "Collateral capacity in USDT"
