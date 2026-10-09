@@ -32,7 +32,11 @@ def _money(value: Any) -> float:
         return 0.0
 
 
-def _trade_metrics(result: Any, risk_usdt: float) -> dict[str, Any]:
+def _trade_metrics(
+    result: Any,
+    risk_usdt: float,
+    funding_by_settlement_ms: dict[int, float],
+) -> dict[str, Any]:
     raw = result.raw if isinstance(result.raw, dict) else {}
     reports = raw.get("reports", {}) if isinstance(raw, dict) else {}
     positions = reports.get("positions", []) if isinstance(reports, dict) else []
@@ -44,8 +48,16 @@ def _trade_metrics(result: Any, risk_usdt: float) -> dict[str, Any]:
         commissions = sum(_money(value) for value in position.get("commissions", []))
         quantity = float(position.get("peak_qty", 0) or 0)
         slippage = quantity * 0.1 * 2.0
+        opened_ms = _timestamp_ms(position.get("ts_opened"))
+        closed_ms = _timestamp_ms(position.get("ts_closed"))
+        entry_notional = quantity * float(position.get("avg_px_open", 0) or 0)
+        funding = sum(
+            entry_notional * rate
+            for settlement_ms, rate in funding_by_settlement_ms.items()
+            if opened_ms < settlement_ms <= closed_ms
+        )
         gross = net + commissions
-        total_cost = commissions + slippage
+        total_cost = commissions + slippage + funding
         scenarios["0x"].append(gross)
         scenarios["1x"].append(gross - total_cost)
         scenarios["2x"].append(gross - 2.0 * total_cost)
@@ -70,6 +82,20 @@ def _trade_metrics(result: Any, risk_usdt: float) -> dict[str, Any]:
         "net_expectancy_r": summarized["1x"]["expectancy_r"],
         "profit_factor_net": summarized["1x"]["profit_factor"],
         "cost_sensitivity": summarized,
+        "funding_settlements_loaded": len(funding_by_settlement_ms),
+    }
+
+
+def _evaluation_metrics(result: Any, trade_metrics: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "trades": trade_metrics["round_trip_trades"],
+        "win_rate": trade_metrics["win_rate_round_trip"],
+        "avg_r": trade_metrics["avg_r"],
+        "net_expectancy_r": trade_metrics["net_expectancy_r"],
+        "profit_factor": trade_metrics["profit_factor_net"],
+        "max_drawdown_pct": _finite(result.max_drawdown_pct),
+        "sharpe": _finite(result.sharpe_ratio),
+        "cost_sensitivity": trade_metrics["cost_sensitivity"],
     }
 
 
@@ -104,15 +130,52 @@ def _fetch_two_year_frame() -> pd.DataFrame:
     return frame[(frame.index >= pd.Timestamp(start)) & (frame.index < pd.Timestamp(end))]
 
 
-def _write_report(result: Any, frame: pd.DataFrame) -> None:
+def _fetch_two_year_funding() -> dict[int, float]:
+    end = datetime(2026, 10, 9, tzinfo=timezone.utc)
+    start = datetime(2024, 10, 9, tzinfo=timezone.utc)
+    cursor = start
+    settlements: dict[int, float] = {}
+    while cursor < end:
+        chunk_end = min(cursor + timedelta(days=40), end)
+        response = data.crypto.futures.funding_rate(
+            symbol=SYMBOL,
+            exchange="bitget",
+            interval="1h",
+            limit=1000,
+            start_time=int(cursor.timestamp() * 1000),
+            end_time=int(chunk_end.timestamp() * 1000),
+        )
+        for row in _records(response):
+            settlement_ms = _timestamp_ms(row.get("next_funding_time"))
+            rate = row.get("funding_rate")
+            if (
+                settlement_ms > 0
+                and int(start.timestamp() * 1000) < settlement_ms <= int(end.timestamp() * 1000)
+                and rate not in (None, "")
+            ):
+                settlements[settlement_ms] = float(rate)
+        cursor = chunk_end
+    if not settlements:
+        raise RuntimeError("historical funding coverage unavailable")
+    return settlements
+
+
+def _write_report(
+    result: Any,
+    frame: pd.DataFrame,
+    trade_metrics: dict[str, Any],
+) -> None:
     output = Path("/workspace/output")
     output.mkdir(parents=True, exist_ok=True)
     raw = dict(result.raw or {})
     summary = dict(result.summary or {})
-    net_pnl = float(summary.get("net_pnl", 0) or 0)
+    engine_net_pnl = float(summary.get("net_pnl", 0) or 0)
+    net_pnl = float(trade_metrics["cost_sensitivity"]["1x"]["net_pnl"])
+    margin_budget = float(_cfg()["margin_budget"])
+    raw["engine_net_pnl_ex_funding_and_slippage"] = engine_net_pnl
     raw["net_pnl"] = net_pnl
     raw["starting_balance"] = summary.get("starting_balance")
-    raw["total_return_pct"] = result.total_return_pct
+    raw["total_return_pct"] = net_pnl / margin_budget * 100.0
     raw["evidence"] = {
         "source": "Bitget BTCUSDT perpetual 1h bars",
         "rows": len(frame),
@@ -122,7 +185,7 @@ def _write_report(result: Any, frame: pd.DataFrame) -> None:
             "development": "2024-10-09/2025-10-08",
             "validation": "2025-10-09/2026-10-08",
         },
-        "cost_basis": "live public maker/taker schedule; account-tier rate pending",
+        "cost_basis": "public maker/taker fees plus two ticks per round trip and modeled historical funding; account-tier rate pending",
     }
     reports = raw.get("reports")
     if isinstance(reports, dict):
@@ -165,16 +228,52 @@ def _run_historical() -> None:
         return
     if frame.index.min() > pd.Timestamp("2024-10-09T01:00:00Z"):
         raise RuntimeError(f"two-year replay coverage incomplete: {frame.index.min()}")
+    funding_by_settlement_ms = _fetch_two_year_funding()
     result = backtest.run(
         ohlcv_data={"BTCUSDT.BITGET": frame},
         spec=runtime.backtest_spec,
     )
-    trade_metrics = _trade_metrics(result, float(_cfg()["risk_usdt"]))
-    _write_report(result, frame)
+    risk_usdt = float(_cfg()["risk_usdt"])
+    trade_metrics = _trade_metrics(result, risk_usdt, funding_by_settlement_ms)
+
+    development_spec = json.loads(json.dumps(dict(runtime.backtest_spec)))
+    development_spec["execution"] = {
+        "start": "2024-10-09T00:00:00Z",
+        "end": "2025-10-09T00:00:00Z",
+    }
+    validation_spec = json.loads(json.dumps(dict(runtime.backtest_spec)))
+    validation_spec["execution"] = {
+        "start": "2025-10-09T00:00:00Z",
+        "end": "2026-10-09T00:00:00Z",
+    }
+    development_result = backtest.run(
+        ohlcv_data={"BTCUSDT.BITGET": frame},
+        spec=development_spec,
+    )
+    validation_result = backtest.run(
+        ohlcv_data={"BTCUSDT.BITGET": frame},
+        spec=validation_spec,
+    )
+    development_metrics = _trade_metrics(
+        development_result,
+        risk_usdt,
+        funding_by_settlement_ms,
+    )
+    validation_metrics = _trade_metrics(
+        validation_result,
+        risk_usdt,
+        funding_by_settlement_ms,
+    )
+    walk_forward = {
+        "development": _evaluation_metrics(development_result, development_metrics),
+        "validation": _evaluation_metrics(validation_result, validation_metrics),
+    }
+    _write_report(result, frame, trade_metrics)
     chart_path = backtest.generate_chart(result)
     summary = dict(result.summary or {})
     metrics = {
-        "net_pnl": float(summary.get("net_pnl", 0) or 0),
+        "net_pnl": trade_metrics["cost_sensitivity"]["1x"]["net_pnl"],
+        "engine_net_pnl_ex_funding_and_slippage": float(summary.get("net_pnl", 0) or 0),
         "total_return_pct": _finite(result.total_return_pct),
         "max_drawdown_pct": _finite(result.max_drawdown_pct),
         "sharpe_ratio": _finite(result.sharpe_ratio),
@@ -206,11 +305,15 @@ def _run_historical() -> None:
             "chart_path": chart_path,
             "period_start": frame.index.min().isoformat(),
             "period_end": frame.index.max().isoformat(),
-            "planned_walk_forward_split": "50% development / 50% out-of-sample validation; separate fold metrics pending",
+            "walk_forward_split": {
+                "development": "2024-10-09/2025-10-08",
+                "validation": "2025-10-09/2026-10-08",
+            },
+            "walk_forward": walk_forward,
+            "selection_note": "validation is a fixed time split, but prior aggregate candidate inspection creates selection leakage",
             "cost_sensitivity": trade_metrics["cost_sensitivity"],
             "pending": [
                 "account-tier fees",
-                "funding-inclusive trade ledger",
             ],
         },
     )
