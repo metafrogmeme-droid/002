@@ -544,15 +544,17 @@ def _restore_kline_prices(frame: Any, bars: list[dict[str, Any]]) -> Any:
 
 def _index_ms(ts: Any) -> int | None:
     try:
+        from .risk import millis_from_bar_clock
+    except ImportError:
+        from risk import millis_from_bar_clock
+    try:
         if isinstance(ts, (int, float)) and not isinstance(ts, bool):
             stamp = int(ts)
             if stamp < 10_000_000_000:
                 stamp *= 1000
             return stamp
         parsed = pd.Timestamp(ts)
-        if parsed.year < 2000:
-            return int(parsed.value / 1_000_000)
-        return int(parsed.timestamp() * 1000)
+        return millis_from_bar_clock(int(parsed.value), int(parsed.year))
     except (TypeError, ValueError, OverflowError):
         return None
 

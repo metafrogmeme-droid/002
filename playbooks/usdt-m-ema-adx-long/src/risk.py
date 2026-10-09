@@ -22,6 +22,17 @@ def funding_rate_from_managed(raw: float) -> float:
     return raw / MANAGED_FUNDING_PERCENT_SCALE
 
 
+def millis_from_bar_clock(ns_value: int, year: int) -> int:
+    """Millisecond epoch for a replay index.
+
+    A millisecond epoch read as nanoseconds still sits in 1970, and the
+    nanosecond field is the original millisecond number.
+    """
+    if year < 2000 and ns_value >= 10**11:
+        return int(ns_value)
+    return int(ns_value / 1_000_000)
+
+
 def ohlc_is_valid(open_: float, high: float, low: float, close: float) -> bool:
     """True when a bar can be replayed without inventing a price."""
     values = (open_, high, low, close)
