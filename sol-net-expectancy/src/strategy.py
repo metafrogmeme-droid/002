@@ -23,7 +23,7 @@ class SolNetExpectancyConfig(StrategyConfig):
     adx_max: str = "35"
     rsi_period: int = 14
     rsi_recovery_level: str = "40"
-    long_trend_period: int = 200
+    long_trend_period: int = 100
     trend_slope_hours: int = 24
     atr_percentile_lookback: int = 168
     atr_percentile_min: str = "30"
