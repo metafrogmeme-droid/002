@@ -118,7 +118,7 @@ def _write_report(result: Any, frame: pd.DataFrame) -> None:
         "rows": len(frame),
         "first_bar": frame.index.min().isoformat(),
         "last_bar": frame.index.max().isoformat(),
-        "walk_forward_split": {
+        "planned_walk_forward_split": {
             "development": "2024-10-09/2025-10-08",
             "validation": "2025-10-09/2026-10-08",
         },
@@ -206,7 +206,7 @@ def _run_historical() -> None:
             "chart_path": chart_path,
             "period_start": frame.index.min().isoformat(),
             "period_end": frame.index.max().isoformat(),
-            "walk_forward_split": "50% development / 50% out-of-sample validation",
+            "planned_walk_forward_split": "50% development / 50% out-of-sample validation; separate fold metrics pending",
             "cost_sensitivity": trade_metrics["cost_sensitivity"],
             "pending": [
                 "account-tier fees",
