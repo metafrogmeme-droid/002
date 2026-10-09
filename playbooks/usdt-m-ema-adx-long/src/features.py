@@ -9,6 +9,7 @@ be read, is reported. Callers must not replace a missing series with zeros.
 from datetime import datetime, timezone
 from typing import Any
 
+import pandas as pd
 from getagent import backtest, data
 
 try:
@@ -214,6 +215,13 @@ def build_replay_frame(symbol: str, start_ms: int, end_ms: int) -> tuple[Any, di
     )
     if "funding_rate" not in getattr(frame, "columns", []):
         raise DataCoverageError(f"{symbol}: replay frame is missing funding_rate")
+    frame = _restore_utc_index(frame)
+    index_min = frame.index.min()
+    index_max = frame.index.max()
+    if int(index_max.year) < 2000:
+        raise DataCoverageError(
+            f"{symbol}: replay index stayed in {index_min.isoformat()} .. {index_max.isoformat()}"
+        )
     coverage = {
         "symbol": native,
         "requested_symbol": symbol,
@@ -225,5 +233,32 @@ def build_replay_frame(symbol: str, start_ms: int, end_ms: int) -> tuple[Any, di
         "funding_first_ms": _time_ms(funding_rows[0]),
         "funding_last_ms": _time_ms(funding_rows[-1]),
         "invalid_signal_code": INVALID_SIGNAL,
+        "index_first": index_min.isoformat(),
+        "index_last": index_max.isoformat(),
     }
     return frame, coverage
+
+
+def _restore_utc_index(frame: Any) -> Any:
+    """Put bar opens on a real UTC timeline.
+
+    Millisecond epochs are sometimes read as nanoseconds, which lands the
+    whole sample in 1970 and then the execution window drops every bar.
+    """
+    index = frame.index
+    if not isinstance(index, pd.DatetimeIndex):
+        numbers = pd.to_numeric(pd.Index(index), errors="coerce")
+        sample = float(numbers[0])
+        unit = "ms" if sample >= 10**11 else "s"
+        restored = frame.copy()
+        restored.index = pd.to_datetime(numbers, unit=unit, utc=True)
+        return restored
+    if len(index) and int(index.max().year) < 2000:
+        restored = frame.copy()
+        restored.index = pd.to_datetime(index.asi8 * 1_000_000, utc=True)
+        return restored
+    if index.tz is None:
+        restored = frame.copy()
+        restored.index = index.tz_localize("UTC")
+        return restored
+    return frame
