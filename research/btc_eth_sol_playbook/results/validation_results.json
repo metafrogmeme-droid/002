@@ -1,0 +1,1385 @@
+{
+  "engine": "LOCAL-RESEARCH-ENGINE (research/btc_eth_sol_playbook/engine.py)",
+  "data": {
+    "start": "2023-08-01",
+    "end": "2026-10-01",
+    "symbols": {
+      "BTCUSDT": {
+        "candles": 27768,
+        "candles_first": "2023-08-01T00:00:00+00:00",
+        "candles_last": "2026-09-30T23:00:00+00:00",
+        "missing_hours": 0,
+        "funding_rows": 3471,
+        "funding_rows_bitget": 243,
+        "funding_rows_binance_proxy": 3228,
+        "bitget_funding_first": "2026-07-12T00:00:00+00:00",
+        "funding_overlap_bitget_vs_binance": {
+          "rows": 243,
+          "corr": 0.2421,
+          "mean_abs_diff": 0.0,
+          "mean_bitget": 0.0,
+          "mean_binance": 0.0001
+        }
+      },
+      "ETHUSDT": {
+        "candles": 27768,
+        "candles_first": "2023-08-01T00:00:00+00:00",
+        "candles_last": "2026-09-30T23:00:00+00:00",
+        "missing_hours": 0,
+        "funding_rows": 3471,
+        "funding_rows_bitget": 243,
+        "funding_rows_binance_proxy": 3228,
+        "bitget_funding_first": "2026-07-12T00:00:00+00:00",
+        "funding_overlap_bitget_vs_binance": {
+          "rows": 243,
+          "corr": 0.347,
+          "mean_abs_diff": 0.0,
+          "mean_bitget": 0.0001,
+          "mean_binance": 0.0
+        }
+      },
+      "SOLUSDT": {
+        "candles": 27768,
+        "candles_first": "2023-08-01T00:00:00+00:00",
+        "candles_last": "2026-09-30T23:00:00+00:00",
+        "missing_hours": 0,
+        "funding_rows": 3471,
+        "funding_rows_bitget": 243,
+        "funding_rows_binance_proxy": 3228,
+        "bitget_funding_first": "2026-07-12T00:00:00+00:00",
+        "funding_overlap_bitget_vs_binance": {
+          "rows": 243,
+          "corr": 0.5095,
+          "mean_abs_diff": 0.0,
+          "mean_bitget": 0.0,
+          "mean_binance": 0.0
+        }
+      }
+    }
+  },
+  "cost_model": {
+    "maker_fee": 0.0002,
+    "taker_fee": 0.0006,
+    "slippage_ticks": 1,
+    "funding": "charged per settlement; Bitget history where available, Binance archive proxy before",
+    "cost_multiplier_scales": "fees, slippage and funding together"
+  },
+  "risk_model": {
+    "risk_per_trade_usdt": 15.0,
+    "max_leverage": 5.0,
+    "margin_budget": 1500.0,
+    "max_concurrent": 3,
+    "stop_atr_mult": 1.5,
+    "tp_r_multiple": 2.0,
+    "entry_ttl_hours": 4,
+    "daily_pause_usdt": 30.0,
+    "daily_stop_usdt": 40.0,
+    "max_consecutive_losses": 5,
+    "funding_block_minutes": 15,
+    "funding_max_against": 0.0003
+  },
+  "sharpe_definition": "daily realised PnL / margin_budget (1500 USDT), mean/std * sqrt(365), calendar days incl. zero-PnL days",
+  "stage1_base_selection": {
+    "window": [
+      "2023-10-01",
+      "2024-10-01"
+    ],
+    "regime_shares": {
+      "BTCUSDT": {
+        "TREND": 0.384,
+        "SIT_OUT": 0.3316,
+        "RANGE": 0.2844
+      },
+      "ETHUSDT": {
+        "SIT_OUT": 0.3617,
+        "TREND": 0.3611,
+        "RANGE": 0.2772
+      },
+      "SOLUSDT": {
+        "SIT_OUT": 0.3702,
+        "TREND": 0.3232,
+        "RANGE": 0.3066
+      }
+    },
+    "candidates": {
+      "ema_adx_trend": {
+        "trades": 130,
+        "window_start": "2023-10-01",
+        "window_end": "2024-10-01",
+        "events": {
+          "daily_pause": 8,
+          "daily_stop": 1,
+          "consecutive_loss_halt": 4
+        },
+        "skips": {
+          "funding_window": 18,
+          "funding_against": 18,
+          "size_cap": 0,
+          "slots": 0,
+          "paused": 6,
+          "qty_below_min": 0,
+          "invalid_atr": 0
+        },
+        "win_rate": 0.3846,
+        "avg_r_gross": 0.0078,
+        "net_expectancy_r": -0.0623,
+        "avg_win_r": 1.1701,
+        "avg_loss_r": -0.8326,
+        "profit_factor": 0.8783,
+        "net_pnl_usdt": -121.5664,
+        "gross_pnl_usdt": 15.1647,
+        "fees_usdt": 126.9826,
+        "slippage_usdt": 0.7786,
+        "funding_usdt": 8.9699,
+        "max_dd_usdt": 226.0698,
+        "max_dd_r": 15.0713,
+        "max_dd_pct_of_capital": 15.0713,
+        "sharpe_daily_ann": -0.5953,
+        "return_pct_of_capital": -8.1044,
+        "exit_reasons": {
+          "TIME": 52,
+          "SL": 40,
+          "TP": 23,
+          "SL_FILL_BAR": 15
+        },
+        "by_symbol": {
+          "BTCUSDT": {
+            "trades": 51,
+            "net_expectancy_r": 0.0784
+          },
+          "ETHUSDT": {
+            "trades": 40,
+            "net_expectancy_r": -0.3515
+          },
+          "SOLUSDT": {
+            "trades": 39,
+            "net_expectancy_r": 0.0502
+          }
+        },
+        "avg_hold_hours": 4.9538,
+        "avg_notional_usdt": 1220.9034,
+        "verdict_allowed": true
+      },
+      "mean_reversion": {
+        "trades": 23,
+        "window_start": "2023-10-01",
+        "window_end": "2024-10-01",
+        "events": {
+          "daily_pause": 0,
+          "daily_stop": 0,
+          "consecutive_loss_halt": 0
+        },
+        "skips": {
+          "funding_window": 4,
+          "funding_against": 0,
+          "size_cap": 5,
+          "slots": 0,
+          "paused": 0,
+          "qty_below_min": 0,
+          "invalid_atr": 0
+        },
+        "win_rate": 0.4348,
+        "avg_r_gross": -0.1803,
+        "net_expectancy_r": -0.264,
+        "avg_win_r": 0.2898,
+        "avg_loss_r": -0.69,
+        "profit_factor": 0.3231,
+        "net_pnl_usdt": -91.0687,
+        "gross_pnl_usdt": -62.1941,
+        "fees_usdt": 27.7807,
+        "slippage_usdt": 0.1088,
+        "funding_usdt": 0.9851,
+        "max_dd_usdt": 100.7915,
+        "max_dd_r": 6.7194,
+        "max_dd_pct_of_capital": 6.7194,
+        "sharpe_daily_ann": -1.9833,
+        "return_pct_of_capital": -6.0712,
+        "exit_reasons": {
+          "TIME": 17,
+          "SL_FILL_BAR": 5,
+          "SL": 1
+        },
+        "by_symbol": {
+          "BTCUSDT": {
+            "trades": 12,
+            "net_expectancy_r": -0.3183
+          },
+          "ETHUSDT": {
+            "trades": 5,
+            "net_expectancy_r": -0.024
+          },
+          "SOLUSDT": {
+            "trades": 6,
+            "net_expectancy_r": -0.3553
+          }
+        },
+        "avg_hold_hours": 1.6522,
+        "avg_notional_usdt": 1511.8522,
+        "verdict_allowed": false
+      }
+    },
+    "chosen_base": "ema_adx_trend"
+  },
+  "stage2_walk_forward": {
+    "folds": [
+      {
+        "train": [
+          "2023-10-01",
+          "2024-10-01"
+        ],
+        "test": [
+          "2024-10-01",
+          "2025-04-01"
+        ],
+        "fit": {
+          "param": "adx_trend_min",
+          "chosen": 30.0,
+          "grid": [
+            {
+              "value": 20.0,
+              "trades": 165,
+              "net_expectancy_r": -0.0191
+            },
+            {
+              "value": 25.0,
+              "trades": 130,
+              "net_expectancy_r": -0.0623
+            },
+            {
+              "value": 30.0,
+              "trades": 91,
+              "net_expectancy_r": -0.0177
+            }
+          ]
+        }
+      },
+      {
+        "train": [
+          "2024-04-01",
+          "2025-04-01"
+        ],
+        "test": [
+          "2025-04-01",
+          "2025-10-01"
+        ],
+        "fit": {
+          "param": "adx_trend_min",
+          "chosen": 20.0,
+          "grid": [
+            {
+              "value": 20.0,
+              "trades": 167,
+              "net_expectancy_r": -0.1249
+            },
+            {
+              "value": 25.0,
+              "trades": 130,
+              "net_expectancy_r": -0.1452
+            },
+            {
+              "value": 30.0,
+              "trades": 100,
+              "net_expectancy_r": -0.1372
+            }
+          ]
+        }
+      },
+      {
+        "train": [
+          "2024-10-01",
+          "2025-10-01"
+        ],
+        "test": [
+          "2025-10-01",
+          "2026-04-01"
+        ],
+        "fit": {
+          "param": "adx_trend_min",
+          "chosen": 25.0,
+          "grid": [
+            {
+              "value": 20.0,
+              "trades": 213,
+              "net_expectancy_r": -0.038
+            },
+            {
+              "value": 25.0,
+              "trades": 173,
+              "net_expectancy_r": -0.0145
+            },
+            {
+              "value": 30.0,
+              "trades": 132,
+              "net_expectancy_r": -0.0302
+            }
+          ]
+        }
+      },
+      {
+        "train": [
+          "2025-04-01",
+          "2026-04-01"
+        ],
+        "test": [
+          "2026-04-01",
+          "2026-10-01"
+        ],
+        "fit": {
+          "param": "adx_trend_min",
+          "chosen": 25.0,
+          "grid": [
+            {
+              "value": 20.0,
+              "trades": 199,
+              "net_expectancy_r": -0.0633
+            },
+            {
+              "value": 25.0,
+              "trades": 155,
+              "net_expectancy_r": 0.0144
+            },
+            {
+              "value": 30.0,
+              "trades": 122,
+              "net_expectancy_r": 0.0087
+            }
+          ]
+        }
+      }
+    ],
+    "per_fold_oos": [
+      {
+        "test": [
+          "2024-10-01",
+          "2025-04-01"
+        ],
+        "param_value": 30.0,
+        "trades": 56,
+        "window_start": "2024-10-01",
+        "window_end": "2025-04-01",
+        "events": {
+          "daily_pause": 3,
+          "daily_stop": 2,
+          "consecutive_loss_halt": 3
+        },
+        "skips": {
+          "funding_window": 6,
+          "funding_against": 1,
+          "size_cap": 0,
+          "slots": 0,
+          "paused": 0,
+          "qty_below_min": 0,
+          "invalid_atr": 0
+        },
+        "win_rate": 0.3393,
+        "avg_r_gross": -0.0618,
+        "net_expectancy_r": -0.1317,
+        "avg_win_r": 1.1199,
+        "avg_loss_r": -0.7743,
+        "profit_factor": 0.7427,
+        "net_pnl_usdt": -110.5975,
+        "gross_pnl_usdt": -51.8728,
+        "fees_usdt": 55.2273,
+        "slippage_usdt": 0.1846,
+        "funding_usdt": 3.3126,
+        "max_dd_usdt": 154.1838,
+        "max_dd_r": 10.2789,
+        "max_dd_pct_of_capital": 10.2789,
+        "sharpe_daily_ann": -1.1802,
+        "return_pct_of_capital": -7.3732,
+        "exit_reasons": {
+          "TIME": 27,
+          "SL": 13,
+          "TP": 8,
+          "SL_FILL_BAR": 8
+        },
+        "by_symbol": {
+          "BTCUSDT": {
+            "trades": 26,
+            "net_expectancy_r": -0.3044
+          },
+          "ETHUSDT": {
+            "trades": 16,
+            "net_expectancy_r": -0.0406
+          },
+          "SOLUSDT": {
+            "trades": 14,
+            "net_expectancy_r": 0.085
+          }
+        },
+        "avg_hold_hours": 5.0536,
+        "avg_notional_usdt": 1233.4504,
+        "verdict_allowed": true
+      },
+      {
+        "test": [
+          "2025-04-01",
+          "2025-10-01"
+        ],
+        "param_value": 20.0,
+        "trades": 119,
+        "window_start": "2025-04-01",
+        "window_end": "2025-10-01",
+        "events": {
+          "daily_pause": 6,
+          "daily_stop": 1,
+          "consecutive_loss_halt": 3
+        },
+        "skips": {
+          "funding_window": 19,
+          "funding_against": 0,
+          "size_cap": 7,
+          "slots": 0,
+          "paused": 7,
+          "qty_below_min": 0,
+          "invalid_atr": 0
+        },
+        "win_rate": 0.4538,
+        "avg_r_gross": 0.0792,
+        "net_expectancy_r": 0.0107,
+        "avg_win_r": 1.1249,
+        "avg_loss_r": -0.9148,
+        "profit_factor": 1.0215,
+        "net_pnl_usdt": 19.1723,
+        "gross_pnl_usdt": 141.3294,
+        "fees_usdt": 115.9547,
+        "slippage_usdt": 0.4305,
+        "funding_usdt": 5.7719,
+        "max_dd_usdt": 277.1837,
+        "max_dd_r": 18.4789,
+        "max_dd_pct_of_capital": 18.4789,
+        "sharpe_daily_ann": 0.1099,
+        "return_pct_of_capital": 1.2782,
+        "exit_reasons": {
+          "TIME": 45,
+          "SL": 42,
+          "TP": 25,
+          "SL_FILL_BAR": 6,
+          "TP_GAP": 1
+        },
+        "by_symbol": {
+          "BTCUSDT": {
+            "trades": 32,
+            "net_expectancy_r": -0.0029
+          },
+          "ETHUSDT": {
+            "trades": 45,
+            "net_expectancy_r": 0.2457
+          },
+          "SOLUSDT": {
+            "trades": 42,
+            "net_expectancy_r": -0.2306
+          }
+        },
+        "avg_hold_hours": 4.9244,
+        "avg_notional_usdt": 1217.1238,
+        "verdict_allowed": true
+      },
+      {
+        "test": [
+          "2025-10-01",
+          "2026-04-01"
+        ],
+        "param_value": 25.0,
+        "trades": 54,
+        "window_start": "2025-10-01",
+        "window_end": "2026-04-01",
+        "events": {
+          "daily_pause": 4,
+          "daily_stop": 1,
+          "consecutive_loss_halt": 2
+        },
+        "skips": {
+          "funding_window": 9,
+          "funding_against": 0,
+          "size_cap": 2,
+          "slots": 0,
+          "paused": 9,
+          "qty_below_min": 0,
+          "invalid_atr": 0
+        },
+        "win_rate": 0.3519,
+        "avg_r_gross": 0.0093,
+        "net_expectancy_r": -0.0605,
+        "avg_win_r": 1.222,
+        "avg_loss_r": -0.7568,
+        "profit_factor": 0.8766,
+        "net_pnl_usdt": -49.0434,
+        "gross_pnl_usdt": 7.5543,
+        "fees_usdt": 54.5672,
+        "slippage_usdt": 0.2096,
+        "funding_usdt": 1.821,
+        "max_dd_usdt": 137.3562,
+        "max_dd_r": 9.1571,
+        "max_dd_pct_of_capital": 9.1571,
+        "sharpe_daily_ann": -0.4368,
+        "return_pct_of_capital": -3.2696,
+        "exit_reasons": {
+          "TIME": 24,
+          "SL": 17,
+          "TP": 9,
+          "SL_FILL_BAR": 4
+        },
+        "by_symbol": {
+          "BTCUSDT": {
+            "trades": 21,
+            "net_expectancy_r": -0.3276
+          },
+          "ETHUSDT": {
+            "trades": 21,
+            "net_expectancy_r": 0.0188
+          },
+          "SOLUSDT": {
+            "trades": 12,
+            "net_expectancy_r": 0.2678
+          }
+        },
+        "avg_hold_hours": 5.0,
+        "avg_notional_usdt": 1263.0284,
+        "verdict_allowed": true
+      },
+      {
+        "test": [
+          "2026-04-01",
+          "2026-10-01"
+        ],
+        "param_value": 25.0,
+        "trades": 67,
+        "window_start": "2026-04-01",
+        "window_end": "2026-10-01",
+        "events": {
+          "daily_pause": 5,
+          "daily_stop": 0,
+          "consecutive_loss_halt": 6
+        },
+        "skips": {
+          "funding_window": 8,
+          "funding_against": 0,
+          "size_cap": 4,
+          "slots": 0,
+          "paused": 4,
+          "qty_below_min": 0,
+          "invalid_atr": 0
+        },
+        "win_rate": 0.3582,
+        "avg_r_gross": 0.198,
+        "net_expectancy_r": 0.1243,
+        "avg_win_r": 1.7381,
+        "avg_loss_r": -0.7764,
+        "profit_factor": 1.2495,
+        "net_pnl_usdt": 124.9486,
+        "gross_pnl_usdt": 199.0257,
+        "fees_usdt": 72.399,
+        "slippage_usdt": 0.5169,
+        "funding_usdt": 1.1612,
+        "max_dd_usdt": 229.0914,
+        "max_dd_r": 15.2728,
+        "max_dd_pct_of_capital": 15.2728,
+        "sharpe_daily_ann": 0.6188,
+        "return_pct_of_capital": 8.3299,
+        "exit_reasons": {
+          "TIME": 24,
+          "SL": 23,
+          "TP": 14,
+          "SL_FILL_BAR": 4,
+          "TP_GAP": 2
+        },
+        "by_symbol": {
+          "BTCUSDT": {
+            "trades": 19,
+            "net_expectancy_r": -0.1952
+          },
+          "ETHUSDT": {
+            "trades": 24,
+            "net_expectancy_r": 0.1676
+          },
+          "SOLUSDT": {
+            "trades": 24,
+            "net_expectancy_r": 0.3341
+          }
+        },
+        "avg_hold_hours": 4.9254,
+        "avg_notional_usdt": 1348.5061,
+        "verdict_allowed": true
+      }
+    ],
+    "oos_stitched_1x": {
+      "trades": 296,
+      "window_start": "2024-10-01",
+      "window_end": "2026-10-01",
+      "events": {
+        "daily_pause": 18,
+        "daily_stop": 4,
+        "consecutive_loss_halt": 14
+      },
+      "skips": {
+        "funding_window": 42,
+        "funding_against": 1,
+        "size_cap": 13,
+        "slots": 0,
+        "paused": 20,
+        "qty_below_min": 0,
+        "invalid_atr": 0
+      },
+      "win_rate": 0.3919,
+      "avg_r_gross": 0.0667,
+      "net_expectancy_r": -0.0035,
+      "avg_win_r": 1.2668,
+      "avg_loss_r": -0.8222,
+      "profit_factor": 0.993,
+      "net_pnl_usdt": -15.52,
+      "gross_pnl_usdt": 296.0367,
+      "fees_usdt": 298.1483,
+      "slippage_usdt": 1.3415,
+      "funding_usdt": 12.0668,
+      "max_dd_usdt": 518.2482,
+      "max_dd_r": 34.5499,
+      "max_dd_pct_of_capital": 34.5499,
+      "sharpe_daily_ann": -0.0256,
+      "return_pct_of_capital": -1.0347,
+      "exit_reasons": {
+        "TIME": 120,
+        "SL": 95,
+        "TP": 56,
+        "SL_FILL_BAR": 22,
+        "TP_GAP": 3
+      },
+      "by_symbol": {
+        "BTCUSDT": {
+          "trades": 98,
+          "net_expectancy_r": -0.1897
+        },
+        "ETHUSDT": {
+          "trades": 106,
+          "net_expectancy_r": 0.1399
+        },
+        "SOLUSDT": {
+          "trades": 92,
+          "net_expectancy_r": 0.0297
+        }
+      },
+      "avg_hold_hours": 4.9628,
+      "avg_notional_usdt": 1258.3257,
+      "verdict_allowed": true
+    }
+  },
+  "transparency_other_base_oos_1x": {
+    "base": "mean_reversion",
+    "fits": [
+      25.0,
+      25.0,
+      25.0,
+      25.0
+    ],
+    "oos": {
+      "trades": 118,
+      "window_start": "2024-10-01",
+      "window_end": "2026-10-01",
+      "events": {
+        "daily_pause": 8,
+        "daily_stop": 0,
+        "consecutive_loss_halt": 5
+      },
+      "skips": {
+        "funding_window": 27,
+        "funding_against": 1,
+        "size_cap": 4,
+        "slots": 0,
+        "paused": 12,
+        "qty_below_min": 0,
+        "invalid_atr": 0
+      },
+      "win_rate": 0.4407,
+      "avg_r_gross": -0.0812,
+      "net_expectancy_r": -0.15,
+      "avg_win_r": 0.4989,
+      "avg_loss_r": -0.6612,
+      "profit_factor": 0.5945,
+      "net_pnl_usdt": -265.4233,
+      "gross_pnl_usdt": -143.6369,
+      "fees_usdt": 120.3867,
+      "slippage_usdt": 0.5989,
+      "funding_usdt": 0.8008,
+      "max_dd_usdt": 268.0341,
+      "max_dd_r": 17.8689,
+      "max_dd_pct_of_capital": 17.8689,
+      "sharpe_daily_ann": -1.2602,
+      "return_pct_of_capital": -17.6949,
+      "exit_reasons": {
+        "TIME": 86,
+        "SL": 18,
+        "SL_FILL_BAR": 13,
+        "TP_GAP": 1
+      },
+      "by_symbol": {
+        "BTCUSDT": {
+          "trades": 42,
+          "net_expectancy_r": -0.2312
+        },
+        "ETHUSDT": {
+          "trades": 44,
+          "net_expectancy_r": -0.0595
+        },
+        "SOLUSDT": {
+          "trades": 32,
+          "net_expectancy_r": -0.1676
+        }
+      },
+      "avg_hold_hours": 1.7542,
+      "avg_notional_usdt": 1276.2,
+      "verdict_allowed": true
+    }
+  },
+  "stage3_cost_sensitivity": {
+    "0x": {
+      "trades": 304,
+      "window_start": "2024-10-01",
+      "window_end": "2026-10-01",
+      "events": {
+        "daily_pause": 4,
+        "daily_stop": 5,
+        "consecutive_loss_halt": 12
+      },
+      "skips": {
+        "funding_window": 43,
+        "funding_against": 1,
+        "size_cap": 13,
+        "slots": 0,
+        "paused": 9,
+        "qty_below_min": 0,
+        "invalid_atr": 0
+      },
+      "win_rate": 0.4145,
+      "avg_r_gross": 0.0629,
+      "net_expectancy_r": 0.0629,
+      "avg_win_r": 1.2599,
+      "avg_loss_r": -0.7845,
+      "profit_factor": 1.1368,
+      "net_pnl_usdt": 286.6175,
+      "gross_pnl_usdt": 286.6175,
+      "fees_usdt": 0.0,
+      "slippage_usdt": 0.0,
+      "funding_usdt": 0.0,
+      "max_dd_usdt": 390.4227,
+      "max_dd_r": 26.0282,
+      "max_dd_pct_of_capital": 26.0282,
+      "sharpe_daily_ann": 0.4612,
+      "return_pct_of_capital": 19.1078,
+      "exit_reasons": {
+        "TIME": 124,
+        "SL": 99,
+        "TP": 56,
+        "SL_FILL_BAR": 22,
+        "TP_GAP": 3
+      },
+      "by_symbol": {
+        "BTCUSDT": {
+          "trades": 102,
+          "net_expectancy_r": -0.0937
+        },
+        "ETHUSDT": {
+          "trades": 108,
+          "net_expectancy_r": 0.1943
+        },
+        "SOLUSDT": {
+          "trades": 94,
+          "net_expectancy_r": 0.0818
+        }
+      },
+      "avg_hold_hours": 4.9704,
+      "avg_notional_usdt": 1251.5299,
+      "verdict_allowed": true
+    },
+    "1x": {
+      "trades": 296,
+      "window_start": "2024-10-01",
+      "window_end": "2026-10-01",
+      "events": {
+        "daily_pause": 18,
+        "daily_stop": 4,
+        "consecutive_loss_halt": 14
+      },
+      "skips": {
+        "funding_window": 42,
+        "funding_against": 1,
+        "size_cap": 13,
+        "slots": 0,
+        "paused": 20,
+        "qty_below_min": 0,
+        "invalid_atr": 0
+      },
+      "win_rate": 0.3919,
+      "avg_r_gross": 0.0667,
+      "net_expectancy_r": -0.0035,
+      "avg_win_r": 1.2668,
+      "avg_loss_r": -0.8222,
+      "profit_factor": 0.993,
+      "net_pnl_usdt": -15.52,
+      "gross_pnl_usdt": 296.0367,
+      "fees_usdt": 298.1483,
+      "slippage_usdt": 1.3415,
+      "funding_usdt": 12.0668,
+      "max_dd_usdt": 518.2482,
+      "max_dd_r": 34.5499,
+      "max_dd_pct_of_capital": 34.5499,
+      "sharpe_daily_ann": -0.0256,
+      "return_pct_of_capital": -1.0347,
+      "exit_reasons": {
+        "TIME": 120,
+        "SL": 95,
+        "TP": 56,
+        "SL_FILL_BAR": 22,
+        "TP_GAP": 3
+      },
+      "by_symbol": {
+        "BTCUSDT": {
+          "trades": 98,
+          "net_expectancy_r": -0.1897
+        },
+        "ETHUSDT": {
+          "trades": 106,
+          "net_expectancy_r": 0.1399
+        },
+        "SOLUSDT": {
+          "trades": 92,
+          "net_expectancy_r": 0.0297
+        }
+      },
+      "avg_hold_hours": 4.9628,
+      "avg_notional_usdt": 1258.3257,
+      "verdict_allowed": true
+    },
+    "2x": {
+      "trades": 294,
+      "window_start": "2024-10-01",
+      "window_end": "2026-10-01",
+      "events": {
+        "daily_pause": 17,
+        "daily_stop": 5,
+        "consecutive_loss_halt": 16
+      },
+      "skips": {
+        "funding_window": 42,
+        "funding_against": 1,
+        "size_cap": 13,
+        "slots": 0,
+        "paused": 23,
+        "qty_below_min": 0,
+        "invalid_atr": 0
+      },
+      "win_rate": 0.3776,
+      "avg_r_gross": 0.0704,
+      "net_expectancy_r": -0.0701,
+      "avg_win_r": 1.252,
+      "avg_loss_r": -0.872,
+      "profit_factor": 0.8709,
+      "net_pnl_usdt": -309.0273,
+      "gross_pnl_usdt": 310.2732,
+      "fees_usdt": 592.2304,
+      "slippage_usdt": 2.656,
+      "funding_usdt": 24.4141,
+      "max_dd_usdt": 697.9937,
+      "max_dd_r": 46.5329,
+      "max_dd_pct_of_capital": 46.5329,
+      "sharpe_daily_ann": -0.5184,
+      "return_pct_of_capital": -20.6018,
+      "exit_reasons": {
+        "TIME": 119,
+        "SL": 94,
+        "TP": 56,
+        "SL_FILL_BAR": 22,
+        "TP_GAP": 3
+      },
+      "by_symbol": {
+        "BTCUSDT": {
+          "trades": 97,
+          "net_expectancy_r": -0.2753
+        },
+        "ETHUSDT": {
+          "trades": 106,
+          "net_expectancy_r": 0.0773
+        },
+        "SOLUSDT": {
+          "trades": 91,
+          "net_expectancy_r": -0.023
+        }
+      },
+      "avg_hold_hours": 4.9592,
+      "avg_notional_usdt": 1258.2085,
+      "verdict_allowed": true
+    }
+  },
+  "stage4_short_side": {
+    "fits": [
+      20.0,
+      25.0,
+      25.0,
+      25.0
+    ],
+    "oos_stitched_1x": {
+      "trades": 281,
+      "window_start": "2024-10-01",
+      "window_end": "2026-10-01",
+      "events": {
+        "daily_pause": 15,
+        "daily_stop": 2,
+        "consecutive_loss_halt": 14
+      },
+      "skips": {
+        "funding_window": 53,
+        "funding_against": 0,
+        "size_cap": 7,
+        "slots": 0,
+        "paused": 33,
+        "qty_below_min": 0,
+        "invalid_atr": 0
+      },
+      "win_rate": 0.3772,
+      "avg_r_gross": 0.0073,
+      "net_expectancy_r": -0.0533,
+      "avg_win_r": 1.2051,
+      "avg_loss_r": -0.8154,
+      "profit_factor": 0.8951,
+      "net_pnl_usdt": -224.4643,
+      "gross_pnl_usdt": 30.8369,
+      "fees_usdt": 258.9798,
+      "slippage_usdt": 1.2345,
+      "funding_usdt": -4.913,
+      "max_dd_usdt": 366.3637,
+      "max_dd_r": 24.4242,
+      "max_dd_pct_of_capital": 24.4242,
+      "sharpe_daily_ann": -0.4266,
+      "return_pct_of_capital": -14.9643,
+      "exit_reasons": {
+        "TIME": 115,
+        "SL": 102,
+        "TP": 49,
+        "SL_FILL_BAR": 13,
+        "TP_GAP": 2
+      },
+      "by_symbol": {
+        "BTCUSDT": {
+          "trades": 92,
+          "net_expectancy_r": -0.177
+        },
+        "ETHUSDT": {
+          "trades": 97,
+          "net_expectancy_r": 0.1032
+        },
+        "SOLUSDT": {
+          "trades": 92,
+          "net_expectancy_r": -0.0945
+        }
+      },
+      "avg_hold_hours": 5.0285,
+      "avg_notional_usdt": 1152.1242,
+      "verdict_allowed": true
+    },
+    "per_fold_oos": [
+      {
+        "test": [
+          "2024-10-01",
+          "2025-04-01"
+        ],
+        "param_value": 20.0,
+        "trades": 87,
+        "window_start": "2024-10-01",
+        "window_end": "2025-04-01",
+        "events": {
+          "daily_pause": 5,
+          "daily_stop": 0,
+          "consecutive_loss_halt": 4
+        },
+        "skips": {
+          "funding_window": 12,
+          "funding_against": 0,
+          "size_cap": 0,
+          "slots": 0,
+          "paused": 20,
+          "qty_below_min": 0,
+          "invalid_atr": 0
+        },
+        "win_rate": 0.3908,
+        "avg_r_gross": 0.0006,
+        "net_expectancy_r": -0.0513,
+        "avg_win_r": 1.2024,
+        "avg_loss_r": -0.8555,
+        "profit_factor": 0.9016,
+        "net_pnl_usdt": -66.9082,
+        "gross_pnl_usdt": 0.7632,
+        "fees_usdt": 70.7516,
+        "slippage_usdt": 0.2767,
+        "funding_usdt": -3.357,
+        "max_dd_usdt": 236.2145,
+        "max_dd_r": 15.7476,
+        "max_dd_pct_of_capital": 15.7476,
+        "sharpe_daily_ann": -0.5114,
+        "return_pct_of_capital": -4.4605,
+        "exit_reasons": {
+          "SL": 33,
+          "TIME": 33,
+          "TP": 18,
+          "SL_FILL_BAR": 3
+        },
+        "by_symbol": {
+          "BTCUSDT": {
+            "trades": 29,
+            "net_expectancy_r": -0.386
+          },
+          "ETHUSDT": {
+            "trades": 28,
+            "net_expectancy_r": 0.2213
+          },
+          "SOLUSDT": {
+            "trades": 30,
+            "net_expectancy_r": 0.0178
+          }
+        },
+        "avg_hold_hours": 4.9885,
+        "avg_notional_usdt": 1016.55,
+        "verdict_allowed": true
+      },
+      {
+        "test": [
+          "2025-04-01",
+          "2025-10-01"
+        ],
+        "param_value": 25.0,
+        "trades": 69,
+        "window_start": "2025-04-01",
+        "window_end": "2025-10-01",
+        "events": {
+          "daily_pause": 4,
+          "daily_stop": 0,
+          "consecutive_loss_halt": 2
+        },
+        "skips": {
+          "funding_window": 6,
+          "funding_against": 0,
+          "size_cap": 2,
+          "slots": 0,
+          "paused": 3,
+          "qty_below_min": 0,
+          "invalid_atr": 0
+        },
+        "win_rate": 0.4348,
+        "avg_r_gross": 0.1069,
+        "net_expectancy_r": 0.0461,
+        "avg_win_r": 1.2191,
+        "avg_loss_r": -0.8562,
+        "profit_factor": 1.0952,
+        "net_pnl_usdt": 47.7064,
+        "gross_pnl_usdt": 110.6045,
+        "fees_usdt": 63.8663,
+        "slippage_usdt": 0.2464,
+        "funding_usdt": -1.2147,
+        "max_dd_usdt": 211.8421,
+        "max_dd_r": 14.1228,
+        "max_dd_pct_of_capital": 14.1228,
+        "sharpe_daily_ann": 0.3506,
+        "return_pct_of_capital": 3.1804,
+        "exit_reasons": {
+          "TIME": 27,
+          "SL": 24,
+          "TP": 13,
+          "SL_FILL_BAR": 4,
+          "TP_GAP": 1
+        },
+        "by_symbol": {
+          "BTCUSDT": {
+            "trades": 18,
+            "net_expectancy_r": 0.1303
+          },
+          "ETHUSDT": {
+            "trades": 28,
+            "net_expectancy_r": 0.0933
+          },
+          "SOLUSDT": {
+            "trades": 23,
+            "net_expectancy_r": -0.0773
+          }
+        },
+        "avg_hold_hours": 4.8116,
+        "avg_notional_usdt": 1158.198,
+        "verdict_allowed": true
+      },
+      {
+        "test": [
+          "2025-10-01",
+          "2026-04-01"
+        ],
+        "param_value": 25.0,
+        "trades": 79,
+        "window_start": "2025-10-01",
+        "window_end": "2026-04-01",
+        "events": {
+          "daily_pause": 4,
+          "daily_stop": 1,
+          "consecutive_loss_halt": 4
+        },
+        "skips": {
+          "funding_window": 15,
+          "funding_against": 0,
+          "size_cap": 1,
+          "slots": 0,
+          "paused": 9,
+          "qty_below_min": 0,
+          "invalid_atr": 0
+        },
+        "win_rate": 0.3797,
+        "avg_r_gross": 0.0881,
+        "net_expectancy_r": 0.0274,
+        "avg_win_r": 1.3492,
+        "avg_loss_r": -0.7819,
+        "profit_factor": 1.0564,
+        "net_pnl_usdt": 32.4198,
+        "gross_pnl_usdt": 104.3441,
+        "fees_usdt": 70.7077,
+        "slippage_usdt": 0.3307,
+        "funding_usdt": 0.8859,
+        "max_dd_usdt": 202.0668,
+        "max_dd_r": 13.4711,
+        "max_dd_pct_of_capital": 13.4711,
+        "sharpe_daily_ann": 0.1928,
+        "return_pct_of_capital": 2.1613,
+        "exit_reasons": {
+          "TIME": 31,
+          "SL": 28,
+          "TP": 16,
+          "SL_FILL_BAR": 3,
+          "TP_GAP": 1
+        },
+        "by_symbol": {
+          "BTCUSDT": {
+            "trades": 29,
+            "net_expectancy_r": -0.0154
+          },
+          "ETHUSDT": {
+            "trades": 28,
+            "net_expectancy_r": -0.0008
+          },
+          "SOLUSDT": {
+            "trades": 22,
+            "net_expectancy_r": 0.1195
+          }
+        },
+        "avg_hold_hours": 4.9747,
+        "avg_notional_usdt": 1119.7809,
+        "verdict_allowed": true
+      },
+      {
+        "test": [
+          "2026-04-01",
+          "2026-10-01"
+        ],
+        "param_value": 25.0,
+        "trades": 46,
+        "window_start": "2026-04-01",
+        "window_end": "2026-10-01",
+        "events": {
+          "daily_pause": 2,
+          "daily_stop": 1,
+          "consecutive_loss_halt": 4
+        },
+        "skips": {
+          "funding_window": 20,
+          "funding_against": 0,
+          "size_cap": 4,
+          "slots": 0,
+          "paused": 1,
+          "qty_below_min": 0,
+          "invalid_atr": 0
+        },
+        "win_rate": 0.2609,
+        "avg_r_gross": -0.2679,
+        "net_expectancy_r": -0.3445,
+        "avg_win_r": 0.8173,
+        "avg_loss_r": -0.7545,
+        "profit_factor": 0.3823,
+        "net_pnl_usdt": -237.6823,
+        "gross_pnl_usdt": -184.8748,
+        "fees_usdt": 53.6541,
+        "slippage_usdt": 0.3806,
+        "funding_usdt": -1.2272,
+        "max_dd_usdt": 237.6823,
+        "max_dd_r": 15.8455,
+        "max_dd_pct_of_capital": 15.8455,
+        "sharpe_daily_ann": -3.2397,
+        "return_pct_of_capital": -15.8455,
+        "exit_reasons": {
+          "TIME": 24,
+          "SL": 17,
+          "SL_FILL_BAR": 3,
+          "TP": 2
+        },
+        "by_symbol": {
+          "BTCUSDT": {
+            "trades": 16,
+            "net_expectancy_r": -0.437
+          },
+          "ETHUSDT": {
+            "trades": 13,
+            "net_expectancy_r": 0.0943
+          },
+          "SOLUSDT": {
+            "trades": 17,
+            "net_expectancy_r": -0.5929
+          }
+        },
+        "avg_hold_hours": 5.5217,
+        "avg_notional_usdt": 1454.9717,
+        "verdict_allowed": true
+      }
+    ],
+    "full_3y_default_threshold_1x": {
+      "trades": 381,
+      "window_start": "2023-10-01",
+      "window_end": "2026-10-01",
+      "events": {
+        "daily_pause": 19,
+        "daily_stop": 4,
+        "consecutive_loss_halt": 17
+      },
+      "skips": {
+        "funding_window": 68,
+        "funding_against": 0,
+        "size_cap": 7,
+        "slots": 0,
+        "paused": 23,
+        "qty_below_min": 0,
+        "invalid_atr": 0
+      },
+      "win_rate": 0.4199,
+      "avg_r_gross": 0.0745,
+      "net_expectancy_r": 0.0167,
+      "avg_win_r": 1.1911,
+      "avg_loss_r": -0.8335,
+      "profit_factor": 1.0345,
+      "net_pnl_usdt": 95.4195,
+      "gross_pnl_usdt": 425.7365,
+      "fees_usdt": 339.176,
+      "slippage_usdt": 1.7684,
+      "funding_usdt": -10.6274,
+      "max_dd_usdt": 366.3637,
+      "max_dd_r": 24.4242,
+      "max_dd_pct_of_capital": 24.4242,
+      "sharpe_daily_ann": 0.1272,
+      "return_pct_of_capital": 6.3613,
+      "exit_reasons": {
+        "TIME": 158,
+        "SL": 133,
+        "TP": 71,
+        "SL_FILL_BAR": 15,
+        "TP_GAP": 4
+      },
+      "by_symbol": {
+        "BTCUSDT": {
+          "trades": 120,
+          "net_expectancy_r": -0.0957
+        },
+        "ETHUSDT": {
+          "trades": 129,
+          "net_expectancy_r": 0.1904
+        },
+        "SOLUSDT": {
+          "trades": 132,
+          "net_expectancy_r": -0.0509
+        }
+      },
+      "avg_hold_hours": 5.1627,
+      "avg_notional_usdt": 1113.6167,
+      "verdict_allowed": true
+    }
+  },
+  "reference_full_3y_default_long_1x": {
+    "trades": 424,
+    "window_start": "2023-10-01",
+    "window_end": "2026-10-01",
+    "events": {
+      "daily_pause": 27,
+      "daily_stop": 3,
+      "consecutive_loss_halt": 19
+    },
+    "skips": {
+      "funding_window": 58,
+      "funding_against": 20,
+      "size_cap": 10,
+      "slots": 0,
+      "paused": 26,
+      "qty_below_min": 0,
+      "invalid_atr": 0
+    },
+    "win_rate": 0.3868,
+    "avg_r_gross": 0.0565,
+    "net_expectancy_r": -0.0131,
+    "avg_win_r": 1.2504,
+    "avg_loss_r": -0.8101,
+    "profit_factor": 0.9736,
+    "net_pnl_usdt": -83.3633,
+    "gross_pnl_usdt": 359.45,
+    "fees_usdt": 419.3212,
+    "slippage_usdt": 2.1064,
+    "funding_usdt": 21.3856,
+    "max_dd_usdt": 540.4815,
+    "max_dd_r": 36.0321,
+    "max_dd_pct_of_capital": 36.0321,
+    "sharpe_daily_ann": -0.1029,
+    "return_pct_of_capital": -5.5576,
+    "exit_reasons": {
+      "TIME": 174,
+      "SL": 130,
+      "TP": 78,
+      "SL_FILL_BAR": 39,
+      "TP_GAP": 3
+    },
+    "by_symbol": {
+      "BTCUSDT": {
+        "trades": 147,
+        "net_expectancy_r": -0.0798
+      },
+      "ETHUSDT": {
+        "trades": 145,
+        "net_expectancy_r": 0.0064
+      },
+      "SOLUSDT": {
+        "trades": 132,
+        "net_expectancy_r": 0.0398
+      }
+    },
+    "avg_hold_hours": 4.9505,
+    "avg_notional_usdt": 1235.5744,
+    "verdict_allowed": true
+  },
+  "stage5_v1_freeze": {
+    "train": [
+      "2025-10-01",
+      "2026-10-01"
+    ],
+    "param": "adx_trend_min",
+    "chosen": 30.0,
+    "grid": [
+      {
+        "value": 20.0,
+        "trades": 179,
+        "net_expectancy_r": -0.0896
+      },
+      {
+        "value": 25.0,
+        "trades": 121,
+        "net_expectancy_r": 0.0418
+      },
+      {
+        "value": 30.0,
+        "trades": 99,
+        "net_expectancy_r": 0.0446
+      }
+    ]
+  },
+  "section6_verdict": {
+    "trades_ge_30": true,
+    "net_expectancy_1x_positive": false,
+    "net_expectancy_2x_positive": false,
+    "verdict": "REJECT (negative net expectancy at 2x costs)",
+    "shorts_enabled": false
+  }
+}
