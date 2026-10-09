@@ -108,7 +108,9 @@ replays them through the managed Nautilus engine with maker 0.02% / taker
 Return % is reported on a strategy basis (`net PnL / margin_budget`); the
 engine's account-basis numbers (100 000 USDT replay balance) are kept
 separately as `account_*`. Latest sandbox results: see `DESIGN.md` →
-"Backtest results".
+"Backtest results". The v1 sandbox run showed negative net expectancy over
+the two-year window and the configuration is marked REJECTED; v1 is kept as
+a frozen, documented baseline and is not recommended for live use.
 
 Forward (live) criteria, fixed in advance: **PASS** = profit factor ≥ 1.3 and
 Sharpe ≥ 0.5 after ≥ 30 live trades; **FAIL** = profit factor ≤ 1.1 → stop.
