@@ -111,7 +111,17 @@ def main() -> None:
     strat = TrendPullbackStrategy(conf)
     engine.add_strategy(strat)
     engine.run()
+    reports = {
+        "orders": engine.trader.generate_orders_report(),
+        "fills": engine.trader.generate_order_fills_report(),
+        "positions": engine.trader.generate_positions_report(),
+        "account": engine.trader.generate_account_report(Venue("BITGET")),
+    }
     engine.dispose()
+    if "--dump-reports" in sys.argv:
+        for name, df in reports.items():
+            blob = json.dumps(df.reset_index().to_dict(orient="records"), default=str)
+            print("report", name, df.shape, "json bytes", len(blob), file=sys.stderr)
 
     led = json.loads(ledger_path.read_text())
     folds = [(f["name"], ledger.month_start_ms(*f["start_ym"]), ledger.month_start_ms(*f["end_ym"])) for f in bt["walk_forward_folds"]]

@@ -41,6 +41,7 @@ class TrendPullbackConfig(StrategyConfig):
     min_notional_usdt: float = 5.0
     ledger_path: str = "output/trades_ledger.json"
     funding_json: str = ""
+    funding_unknown_policy: str = "skip"
 
 
 class TrendPullbackStrategy(Strategy):
@@ -168,9 +169,11 @@ class TrendPullbackStrategy(Strategy):
             rate = self._funding_at(sym, open_ms)
             fund = expected_funding_usdt(rate, qty * limit, close_ms, self.p)
             if fund is None:
-                self._skip("SKIP_FUNDING_UNKNOWN")
-                return
-            if fund > self.p.max_funding_r * self.p.risk_usdt:
+                if self.cfg.funding_unknown_policy != "allow":
+                    self._skip("SKIP_FUNDING_UNKNOWN")
+                    return
+                self._skip("FUNDING_UNKNOWN_ALLOWED")
+            elif fund > self.p.max_funding_r * self.p.risk_usdt:
                 self._skip("SKIP_FUNDING_COST")
                 return
         else:

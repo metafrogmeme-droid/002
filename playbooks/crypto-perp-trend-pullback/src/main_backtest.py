@@ -31,6 +31,23 @@ def _plain(obj: Any) -> Any:
     return json.loads(json.dumps(obj, default=str))
 
 
+def _records(value: Any) -> Any:
+    if isinstance(value, pd.DataFrame):
+        return value.reset_index().to_dict(orient="records")
+    return value
+
+
+def _execution_reports(raw: dict) -> dict:
+    """Orders/fills/positions/account from the engine; the platform rejects runs without them."""
+    reports = raw.get("reports") or {}
+    out = {}
+    for key, value in dict(reports).items():
+        if "equity" in str(key).lower():
+            continue
+        out[str(key)] = _plain(_records(value))
+    return out
+
+
 def _clock() -> float:
     return datetime.now(timezone.utc).timestamp()
 
@@ -41,7 +58,9 @@ def _data_sources(coverage: dict, led: dict) -> dict:
         "signals_and_fills": "Bitget USDT-M perpetual 1H klines (getagent.data, exchange=bitget)",
         "fees": "Bitget public contract config base tier: maker 0.02% entry, taker 0.06% every exit",
         "slippage": "1 tick per side on every fill",
-        "funding": "Bitget funding history from the dates below; Binance USDT-M funding as proxy before",
+        "funding": ("Bitget funding history from the dates below; Coinglass OI-weighted cross-exchange "
+                    "funding (fr_close, scaled per data_coverage.coinglass_scale) as proxy before; entries "
+                    "with no funding value are allowed in replay and counted as FUNDING_UNKNOWN_ALLOWED"),
         "funding_bitget_from": starts,
         "funding_gate": led.get("funding_gate"),
         "spread_gate": "live only (no historical order book); Bitget majors quote ~0.01-0.1 bps",
@@ -111,6 +130,7 @@ def run() -> None:
         "trade_end_ms": end_ms,
         "ledger_path": str(OUT / "trades_ledger.json"),
         "funding_json": json.dumps({s: funding.get(s, []) for s in loaded_syms if funding.get(s)}),
+        "funding_unknown_policy": str(bt.get("funding_unknown_policy", "allow")),
     })
 
     result = backtest.run(ohlcv_data=ohlcv, spec=spec)
@@ -139,6 +159,8 @@ def run() -> None:
         "summary": engine_summary,
         "stats": _plain(raw.get("stats") or {}),
         "config": _plain(raw.get("config") or {}),
+        "reports": _execution_reports(raw),
+        "metrics_basis": "strategy",
         "metrics_note": (
             "Top-level metrics come from the Playbook trade ledger at 1x costs: Bitget maker fee on limit "
             "entries, taker fee on all exits, 1 tick slippage per side, historical Bitget funding. "
@@ -184,6 +206,7 @@ def run() -> None:
         "expectancy_r_2x": rep["cost_sensitivity"]["2x"]["net_expectancy_r"],
         "engine_total_return_pct": result.total_return_pct,
         "engine_fill_count": result.total_trades,
+        "metrics_basis": "strategy",
     })
     runtime.emit_signal(
         action="watch",

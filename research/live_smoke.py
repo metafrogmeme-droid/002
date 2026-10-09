@@ -41,7 +41,7 @@ def _ticker(symbol, exchange):
 
 
 def _funding(symbol, exchange, interval, limit, start_time, end_time):
-    return [{"timestamp": end_time - HOUR, "funding_rate": 0.0001}]
+    return [{"timestamp": end_time - HOUR, "funding_rate": 0.01}]  # SDK percent units
 
 
 def build_stub(manifest):
