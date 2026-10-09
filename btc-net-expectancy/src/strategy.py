@@ -22,7 +22,7 @@ class BtcNetExpectancyConfig(StrategyConfig):
     adx_min: str = "15"
     adx_max: str = "35"
     rsi_period: int = 14
-    rsi_recovery_level: str = "50"
+    rsi_recovery_level: str = "30"
     long_trend_period: int = 200
     trend_slope_hours: int = 24
     atr_percentile_lookback: int = 168

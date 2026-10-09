@@ -19,7 +19,7 @@ strategy:
     adx_min: "15"
     adx_max: "35"
     rsi_period: 14
-    rsi_recovery_level: "50"
+    rsi_recovery_level: "30"
     long_trend_period: 200
     trend_slope_hours: 24
     atr_percentile_lookback: 168
