@@ -115,20 +115,31 @@ class PerpTrendStrategy(Strategy):
     def set_feature_frames(self, feature_frames: dict[str, Any]) -> None:
         self.feature_frames = dict(feature_frames or {})
 
+    @staticmethod
+    def _as_instrument_id(value: Any) -> InstrumentId:
+        return value if isinstance(value, InstrumentId) else InstrumentId.from_str(str(value))
+
+    @staticmethod
+    def _as_bar_type(value: Any) -> BarType:
+        return value if isinstance(value, BarType) else BarType.from_str(str(value))
+
     def _resolve_instruments(self) -> list[InstrumentId]:
-        ids: list[InstrumentId] = list(self.cfg.instrument_ids or ())
+        ids = [self._as_instrument_id(v) for v in (self.cfg.instrument_ids or ())]
         if not ids and self.cfg.instrument_id is not None:
-            ids = [self.cfg.instrument_id]
+            ids = [self._as_instrument_id(self.cfg.instrument_id)]
         if not ids:
             ids = [inst.id for inst in self.cache.instruments()]
         return ids
 
     def _bar_type_for(self, instrument_id: InstrumentId) -> BarType:
-        for bt in self.cfg.bar_types or ():
+        for raw in self.cfg.bar_types or ():
+            bt = self._as_bar_type(raw)
             if bt.instrument_id == instrument_id:
                 return bt
-        if self.cfg.bar_type is not None and self.cfg.bar_type.instrument_id == instrument_id:
-            return self.cfg.bar_type
+        if self.cfg.bar_type is not None:
+            bt = self._as_bar_type(self.cfg.bar_type)
+            if bt.instrument_id == instrument_id:
+                return bt
         return BarType.from_str(f"{instrument_id}-1-HOUR-LAST-EXTERNAL")
 
     def _load_funding(self, instrument_id: InstrumentId) -> None:
@@ -301,11 +312,20 @@ class PerpTrendStrategy(Strategy):
             self._skip(F.RC_SKIP_FUNDING_RATE)
             self._log(action="skip", reason_code=F.RC_SKIP_FUNDING_RATE, funding_rate=funding_rate, **base_log)
             return
+        if funding_rate is None:
+            self.stats["entries_without_funding_read"] = self.stats.get("entries_without_funding_read", 0) + 1
 
         assert snap.atr is not None
         tick = float(instrument.price_increment)
         size_step = float(instrument.size_increment)
-        entry_price = F.quantize_down(snap.close, tick) if side == "long" else F.quantize_nearest(snap.close, tick)
+        # "At or better than signal price": rest one tick inside the signal close so
+        # the order is a passive (maker) limit that must be traded through to fill.
+        if side == "long":
+            entry_price = F.quantize_down(snap.close, tick) - tick
+        else:
+            entry_price = F.quantize_down(snap.close, tick) + tick
+            if entry_price <= snap.close + 1e-12:
+                entry_price += tick
         stop_distance = F.quantize_nearest(p.stop_atr_multiple * snap.atr, tick)
         if stop_distance < tick:
             stop_distance = tick
@@ -366,11 +386,13 @@ class PerpTrendStrategy(Strategy):
             "atr_pct_rank_at_signal": snap.atr_pct_rank,
             "volume_ratio_at_signal": snap.volume_ratio,
             "funding_rate_at_signal": funding_rate,
+            "funding_filter_applied": funding_rate is not None,
             "entry_order_id": entry_order.client_order_id.value,
             "fees_usdt": 0.0,
             "funding_usdt": 0.0,
             "slippage_usdt": 0.0,
             "funding_settlements": 0,
+            "funding_estimated_settlements": 0,
         }
         self._pending[instrument_id] = rec
         self._entry_ids[entry_order.client_order_id.value] = instrument_id
@@ -403,7 +425,10 @@ class PerpTrendStrategy(Strategy):
         rec = self._open.get(instrument_id)
         if rec is None or rec.get("exit_requested"):
             return
-        if close_ts - rec["entry_fill_ts"] >= self.params.time_stop_hours * 3600:
+        # entry_fill_ts is the close of the fill bar; the fill happened somewhere in
+        # the preceding hour, so exiting at (time_stop - 1) hours after that close
+        # guarantees the position is flat no later than time_stop hours after the fill.
+        if close_ts - rec["entry_fill_ts"] >= (self.params.time_stop_hours - 1) * 3600:
             self._force_exit(instrument_id, F.RC_EXIT_TIME, close_ts)
 
     def _force_exit(self, instrument_id: InstrumentId, reason: str, close_ts: int) -> None:
@@ -434,8 +459,11 @@ class PerpTrendStrategy(Strategy):
             return
         rate = self._funding_rate_at(rec["symbol"], close_ts)
         if rate is None:
-            rec["funding_missing"] = rec.get("funding_missing", 0) + 1
-            return
+            # No historical funding row: charge the labelled fallback rate against
+            # the position and count it so the report shows how much cost is estimated.
+            rate = self.params.funding_fallback_rate_pct / 100.0 * (1.0 if rec["side"] == "long" else -1.0)
+            rec["funding_estimated_settlements"] += 1
+            self.stats["funding_settlements_estimated"] = self.stats.get("funding_settlements_estimated", 0) + 1
         sign = 1.0 if rec["side"] == "long" else -1.0
         rec["funding_usdt"] += sign * rate * rec["qty"] * close
         rec["funding_settlements"] += 1
@@ -450,7 +478,9 @@ class PerpTrendStrategy(Strategy):
         fill_px = float(event.last_px)
         fill_qty = float(event.last_qty)
         commission = float(event.commission.as_double()) if event.commission is not None else 0.0
-        ts = int(event.ts_event) // NS
+        # Fill events carry the bar's ts_event; normalise to the close of that bar
+        # when bars are stamped by open time so all timestamps share one convention.
+        ts = int(event.ts_event) // NS + (F.INTERVAL_SECONDS if self._ts_is_open else 0)
         oid = event.client_order_id.value
 
         if oid in self._entry_ids:
@@ -565,7 +595,8 @@ class PerpTrendStrategy(Strategy):
             "params": self.params.__dict__,
             "trades": self.trades,
             "open_at_end": self.open_at_end,
-            "actions": self.actions,
+            "actions": self.actions[-3000:],
+            "actions_total": len(self.actions),
             "stats": self.stats,
             "daily_pnl": {str(k): v for k, v in self.daily_pnl.items()},
             "halt_events": self.halt_events,

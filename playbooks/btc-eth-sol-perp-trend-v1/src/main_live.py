@@ -551,8 +551,8 @@ def run() -> None:
             reason = F.RC_SKIP_MAX_POSITIONS
         elif F.in_funding_window(now, params.funding_window_minutes) or F.in_funding_window(snap.close_ts, params.funding_window_minutes):
             reason = F.RC_SKIP_FUNDING_WINDOW
-        elif F.funding_blocks_entry("long", info["funding_rate"], params.max_funding_rate_pct):
-            reason = F.RC_SKIP_FUNDING_RATE
+        elif info["funding_rate"] is None or F.funding_blocks_entry("long", info["funding_rate"], params.max_funding_rate_pct):
+            reason = F.RC_SKIP_FUNDING_RATE  # live fails closed when funding cannot be read
         if reason:
             _log_action(state, symbol=symbol, side="long", action="skip", reason_code=reason, intended_price=snap.close, filled_price=None)
             runtime.emit_signal_or_follow(action="watch", symbol=symbol, confidence=0.0, metrics=base_metrics, meta={}, reason_code=reason, reason_text=f"Long trigger fired but blocked by {reason}.")

@@ -209,6 +209,10 @@ def walk_forward(
     oos_trades: list[dict[str, Any]] = []
     while test_start < end_ts:
         test_end = min(_add_months(test_start, test_months), end_ts)
+        # Absorb a short trailing remainder (< half a test window) into this fold
+        # instead of reporting a near-empty extra fold.
+        if end_ts - test_end < (_add_months(test_start, test_months) - test_start) // 2:
+            test_end = end_ts
         train = [t for t in trades if start_ts <= int(t.get("exit_ts") or 0) < test_start]
         test = [t for t in trades if test_start <= int(t.get("exit_ts") or 0) < test_end]
         oos_trades.extend(test)

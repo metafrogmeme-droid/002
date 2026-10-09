@@ -92,6 +92,9 @@ class StrategyParams:
     max_consecutive_losses: int = 5
     funding_window_minutes: int = 15
     max_funding_rate_pct: float = 0.03
+    # Used only for cost accounting at settlements where no historical funding
+    # row exists; such settlements are counted and reported as estimated.
+    funding_fallback_rate_pct: float = 0.01
     slippage_ticks: int = 1
     side_mode: str = "long_only"
 
@@ -365,10 +368,11 @@ def funding_blocks_entry(side: str, funding_rate: Optional[float], max_rate_pct:
     """Skip when funding is charged *against* the intended side above the cap.
 
     Longs pay when funding is positive, shorts pay when it is negative.
-    A missing funding value is treated as blocking (fail closed).
+    A missing value cannot be evaluated here: callers decide (live fails
+    closed; replay proceeds but flags the trade as `funding_filter_applied=False`).
     """
     if funding_rate is None:
-        return True
+        return False
     cap = max_rate_pct / 100.0
     if side == "long":
         return funding_rate > cap

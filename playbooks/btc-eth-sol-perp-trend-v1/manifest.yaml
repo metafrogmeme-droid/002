@@ -21,9 +21,9 @@ long_description: |
   SOL USDT-margined perpetual contracts on Bitget. Its thesis is that when a
   market is already trending with healthy but not extreme volatility, shallow
   pullbacks toward the short-term trend line that are bought back with
-  above-normal volume tend to resolve in the direction of the trend. The
-  Playbook is designed to stay out of range-bound chop, dead quiet markets
-  and volatility blow-offs, and to trade only the orderly part of an uptrend.
+  above-normal volume tend to resolve in the direction of the trend.   It
+  is designed to stay out of range-bound chop, dead quiet markets and
+  volatility blow-offs.
 
   Entry decisions are driven by a regime read first and a trigger second. The
   regime read combines a directional-strength measure with a rolling
@@ -38,10 +38,10 @@ long_description: |
 
   Every position carries an exchange-side stop loss and take profit attached
   to the entry order itself, sized so that the loss at the stop is a fixed
-  amount of USDT. The take profit is a fixed multiple of that risk. A time
+  amount of USDT, with the take profit a fixed multiple of that risk. A time
   stop closes positions that have not resolved, a daily loss limit pauses and
-  then stops new entries, and a streak of consecutive losses halts trading.
-  Shorts are disabled in this version.
+  then stops new entries, and a streak of losses halts trading. Shorts are
+  disabled in this version.
 
   Subscribers may adjust the margin budget, which caps the isolated margin in
   use and is the denominator for reported returns; the leverage, which only
@@ -98,6 +98,7 @@ strategy_config:
   max_consecutive_losses: 5
   funding_window_minutes: 15
   max_funding_rate_pct: 0.03
+  funding_fallback_rate_pct: 0.01   # cost accounting only, for settlements without a historical funding row (counted as estimated)
   slippage_ticks: 1
   side_mode: long_only
   # --- replay window / validation ---
