@@ -32,4 +32,6 @@ halted: five consecutive losses
 - 1x: 25 trades, NET E +0.0079 R, PF 1.020
 - 2x: 25 trades, NET E −0.0439 R, PF 0.898
 
+Local `scripts/validate.py ./humanoid-usdtm-ema-adx-trend/` : **Validation PASSED**.
+
 Do not activate. Official sandbox / publish / subscribe links: PENDING.
