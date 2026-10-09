@@ -26,20 +26,29 @@ VENUE = "BITGET"
 OHLCV = ("open", "high", "low", "close", "volume")
 
 
-def _write_funding_sidecars(funding_frames: dict[str, pd.DataFrame]) -> None:
-    """Persist raw settlement-level funding so the platform's re-run of the
-    strategy class (raw OHLCV only) sees the same funding history we did."""
+def _write_sidecars(funding_frames: dict[str, pd.DataFrame], warmup_frames: dict[str, pd.DataFrame]) -> None:
+    """Persist settlement-level funding and the pre-window warm-up bars so the
+    strategy (also when the platform re-runs the class on raw OHLCV) sees the
+    same funding history and starts with valid indicators."""
     FEATURE_SIDECAR_DIR.mkdir(parents=True, exist_ok=True)
     for path in FEATURE_SIDECAR_DIR.glob("*.json"):
         path.unlink()
-    for symbol, frame in funding_frames.items():
-        if frame is None or frame.empty or "funding_rate" not in frame.columns:
-            continue
-        series = frame["funding_rate"].astype(float).dropna()
-        payload = {
-            "ts_ns": [int(ts.value) for ts in series.index],
-            "funding_rate": [float(v) for v in series.tolist()],
-        }
+    for symbol in set(funding_frames) | set(warmup_frames):
+        payload: dict[str, Any] = {"ts_ns": [], "funding_rate": []}
+        funding = funding_frames.get(symbol)
+        if funding is not None and not funding.empty and "funding_rate" in funding.columns:
+            series = funding["funding_rate"].astype(float).dropna()
+            payload["ts_ns"] = [int(ts.value) for ts in series.index]
+            payload["funding_rate"] = [float(v) for v in series.tolist()]
+        warm = warmup_frames.get(symbol)
+        if warm is not None and not warm.empty:
+            payload["warmup"] = {
+                "first": warm.index.min().isoformat(),
+                "last": warm.index.max().isoformat(),
+                "high": [float(v) for v in warm["high"].tolist()],
+                "low": [float(v) for v in warm["low"].tolist()],
+                "close": [float(v) for v in warm["close"].tolist()],
+            }
         (FEATURE_SIDECAR_DIR / f"{symbol}.json").write_text(json.dumps(payload), encoding="utf-8")
 
 
@@ -85,6 +94,7 @@ def run() -> None:
     fetch_start = window_start - timedelta(days=warmup_days)
 
     frames: dict[str, pd.DataFrame] = {}
+    full_bars: dict[str, pd.DataFrame] = {}
     funding_frames: dict[str, pd.DataFrame] = {}
     coverage: dict[str, Any] = {"bars": {}, "funding": {}}
     rules_json: dict[str, Any] = {}
@@ -113,6 +123,7 @@ def run() -> None:
         if parity is None:
             # Prove the in-strategy incremental indicators equal the vectorised live-path ones.
             parity = features.indicator_parity(bars, params)
+        full_bars[symbol] = bars
         frame = features.build_replay_frame(bars, funding, params)
         frame = frame[frame.index >= pd.Timestamp(max(window_start, bars.index.min().to_pydatetime()))]
         frames[symbol] = frame
@@ -153,7 +164,8 @@ def run() -> None:
         REPLAY_STATE_PATH.unlink()
     # Sidecars stay on disk on purpose: the platform's own re-run of the strategy
     # class picks them up so official evidence and this report share one funding history.
-    _write_funding_sidecars(funding_frames)
+    warmup_frames = {s: full_bars[s][full_bars[s].index < pd.Timestamp(eff_start)] for s in frames}
+    _write_sidecars(funding_frames, warmup_frames)
     # Feed the engine raw OHLCV only -- identical input to the platform re-run; the
     # strategy derives every indicator itself.
     result = backtest.run(
@@ -244,6 +256,8 @@ def run() -> None:
         "bars_seen": state.get("bars_seen"),
         "ts_is_close_time": state.get("ts_is_close_time"),
         "funding_source_in_replay": state.get("funding_source"),
+        "warmup_bars_used": state.get("warmup_bars_used"),
+        "warmup_bars_available": {s: int(len(f)) for s, f in warmup_frames.items()},
         "indicator_parity_incremental_vs_vectorised": parity,
         "elapsed_seconds": round((features.utc_now() - started).total_seconds(), 2),
     }

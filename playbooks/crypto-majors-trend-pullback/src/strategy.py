@@ -40,6 +40,18 @@ FEATURE_SIDECAR_DIR = Path("/workspace/output/_features")
 FUNDING_FETCH_BUDGET_SECONDS = 25.0
 
 
+def _manifest_params() -> dict[str, Any]:
+    try:
+        from getagent import runtime  # noqa: PLC0415 - only needed on the fallback path
+
+        cfg = dict(runtime.manifest.get("strategy_config", {}) or {})
+    except Exception:  # noqa: BLE001 - manifest unavailable outside the sandbox
+        cfg = {}
+    if cfg:
+        cfg["margin_budget"] = float(cfg.get("margin_budget", "500") or 500)
+    return cfg
+
+
 class TrendPullbackConfig(StrategyConfig):
     instrument_id: Optional[InstrumentId] = None
     bar_type: Optional[BarType] = None
@@ -56,6 +68,10 @@ class TrendPullbackStrategy(Strategy):
         super().__init__(config)
         self.cfg = config
         self.params: dict[str, Any] = json.loads(config.params_json or "{}")
+        if not self.params:
+            # Platform fallback bootstrap runs the class straight from backtest.yaml
+            # without main_backtest's injected params: read the manifest instead.
+            self.params = _manifest_params()
         self._rules_raw: dict[str, Any] = json.loads(config.instrument_rules_json or "{}")
         self.feature_frames: dict[str, pd.DataFrame] = {}
         self._indicators: dict[str, IncrementalIndicators] = {}
@@ -78,6 +94,8 @@ class TrendPullbackStrategy(Strategy):
         self.bars_seen = 0
         self.funding_known = False
         self.funding_source = "none"
+        self._sidecars: Optional[dict[str, dict[str, Any]]] = None
+        self.warmup_bars_used: dict[str, int] = {}
 
     # ------------------------------------------------------------------ setup
     def set_feature_frames(self, feature_frames: dict[str, pd.DataFrame]) -> None:
@@ -96,20 +114,40 @@ class TrendPullbackStrategy(Strategy):
         )
         return True
 
+    def _read_sidecars(self) -> dict[str, dict[str, Any]]:
+        """main_backtest writes one JSON sidecar per symbol:
+        {"ts_ns": [...], "funding_rate": [...], "warmup": {"high": [...], "low": [...], "close": [...]}}."""
+        if self._sidecars is None:
+            self._sidecars = {}
+            if FEATURE_SIDECAR_DIR.exists():
+                for path in FEATURE_SIDECAR_DIR.glob("*.json"):
+                    try:
+                        self._sidecars[path.stem] = json.loads(path.read_text(encoding="utf-8"))
+                    except Exception:  # noqa: BLE001 - malformed sidecar is treated as absent
+                        continue
+        return self._sidecars
+
     def _load_funding_sidecars(self) -> bool:
-        """main_backtest writes one JSON sidecar per symbol: {"ts_ns": [...], "funding_rate": [...]}."""
-        if not FEATURE_SIDECAR_DIR.exists():
-            return False
         loaded = False
-        for path in FEATURE_SIDECAR_DIR.glob("*.json"):
-            try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
-                rates = payload.get("funding_rate") or (payload.get("columns") or {}).get("funding_rate")
-                frame = pd.DataFrame({"funding_rate": rates}, index=pd.to_datetime(payload["ts_ns"], utc=True))
-            except Exception:  # noqa: BLE001 - malformed sidecar is treated as absent
+        for symbol, payload in self._read_sidecars().items():
+            rates = payload.get("funding_rate")
+            if not rates:
                 continue
-            loaded = self._ingest_funding_frame(path.stem, frame) or loaded
+            frame = pd.DataFrame({"funding_rate": rates}, index=pd.to_datetime(payload["ts_ns"], utc=True))
+            loaded = self._ingest_funding_frame(symbol, frame) or loaded
         return loaded
+
+    def _prewarm_indicators(self) -> None:
+        """Feed pre-window bars so indicators are valid from the first replayed bar,
+        exactly like the live path which always sees trailing history."""
+        for symbol, payload in self._read_sidecars().items():
+            warm = payload.get("warmup") or {}
+            ind = self._indicators.get(symbol)
+            if ind is None or not warm.get("close"):
+                continue
+            for h, l, c in zip(warm["high"], warm["low"], warm["close"]):
+                ind.update(h, l, c)
+            self.warmup_bars_used[symbol] = len(warm["close"])
 
     def _fetch_funding_direct(self, symbols: list[str]) -> bool:
         """Last resort inside the platform re-run: pull funding history via the SDK."""
@@ -179,6 +217,7 @@ class TrendPullbackStrategy(Strategy):
                 raise RuntimeError(f"instrument {iid} missing from cache")
             self._instruments[iid.symbol.value] = instrument
             self._indicators[iid.symbol.value] = IncrementalIndicators(self.params)
+        self._prewarm_indicators()
         self._resolve_funding(list(self._instruments))
         self._bar_types = bar_types
         for bar_type in bar_types:
@@ -534,6 +573,7 @@ class TrendPullbackStrategy(Strategy):
             "bars_seen": self.bars_seen,
             "funding_known": self.funding_known,
             "funding_source": self.funding_source,
+            "warmup_bars_used": self.warmup_bars_used,
             "ts_is_close_time": self._ts_is_close_time,
             "unresolved_slot": open_slot,
         }
