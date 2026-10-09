@@ -193,24 +193,37 @@ def fetch_funding_window(
     requests = 0
     cursor_end = end
     truncated_by_deadline = False
+    # The funding endpoint is documented with pair symbols for exchange feeds and
+    # base-asset symbols for aggregated feeds; try the pair first, then the base.
+    symbol_candidates = [symbol]
+    for quote in ("USDT", "USDC", "USD"):
+        if symbol.endswith(quote) and len(symbol) > len(quote):
+            symbol_candidates.append(symbol[: -len(quote)])
+            break
+    symbol_used = symbol
     while cursor_end > start:
         if deadline is not None and utc_now() >= deadline:
             truncated_by_deadline = True
             break
         cursor_start = max(start, cursor_end - timedelta(days=KLINE_CHUNK_DAYS))
-        try:
-            raw = data.crypto.futures.funding_rate(
-                symbol=symbol,
-                exchange=exchange,
-                interval="4h",
-                limit=1000,
-                start_time=int(cursor_start.timestamp() * 1000),
-                end_time=int(cursor_end.timestamp() * 1000),
-            )
-        except Exception:  # noqa: BLE001 - endpoint failure is reported below
-            raw = None
-        requests += 1
-        df = _frame_from_obb(raw)
+        df = pd.DataFrame()
+        for candidate in ([symbol_used] if chunks else symbol_candidates):
+            try:
+                raw = data.crypto.futures.funding_rate(
+                    symbol=candidate,
+                    exchange=exchange,
+                    interval="4h",
+                    limit=1000,
+                    start_time=int(cursor_start.timestamp() * 1000),
+                    end_time=int(cursor_end.timestamp() * 1000),
+                )
+            except Exception:  # noqa: BLE001 - endpoint failure is reported below
+                raw = None
+            requests += 1
+            df = _frame_from_obb(raw)
+            if not df.empty and "funding_rate" in df.columns:
+                symbol_used = candidate
+                break
         if df.empty or "funding_rate" not in df.columns:
             break
         time_col = "timestamp" if "timestamp" in df.columns else "date"
@@ -230,6 +243,7 @@ def fetch_funding_window(
         frame = pd.DataFrame(columns=["funding_rate"])
     report = {
         "symbol": symbol,
+        "symbol_used": symbol_used,
         "requests": requests,
         "rows": int(len(frame)),
         "first": frame.index.min().isoformat() if len(frame) else None,
@@ -247,17 +261,13 @@ def build_replay_frame(
     """OHLCV + indicators + as-of aligned funding_rate, ready for backtest.run."""
     enriched = compute_indicators(bars, params)
     if funding is not None and len(funding):
-        enriched = backtest.build_feature_frame(
-            enriched,
-            features=[
-                backtest.FeatureSource(
-                    data=funding,
-                    include_columns=("funding_rate",),
-                    mode="asof",
-                    direction="backward",
-                )
-            ],
-        )
+        # As-of (backward) alignment: each bar carries the latest funding rate known
+        # at or before its open time. Equivalent to backtest.build_feature_frame(mode="asof").
+        series = funding["funding_rate"].astype(float).sort_index()
+        series = series[~series.index.duplicated(keep="last")]
+        enriched["funding_rate"] = series.reindex(
+            series.index.union(enriched.index)
+        ).ffill().reindex(enriched.index)
     else:
         # Funding coverage missing: keep the column so the engine contract holds,
         # but the run reports funding_degraded=True and the funding gate is off.

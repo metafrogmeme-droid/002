@@ -434,7 +434,11 @@ class TrendPullbackStrategy(Strategy):
         events = self.risk.register_close(exit_time, net_for_breakers, self.params)
         self._log(
             ts=exit_time.isoformat(), symbol=symbol, side="sell", action=trade["exit_reason"],
-            intended_price=plan.stop_price if trade["exit_reason"] == Reason.STOP_HIT else plan.tp_price,
+            intended_price=(
+                plan.stop_price if trade["exit_reason"] == Reason.STOP_HIT
+                else plan.tp_price if trade["exit_reason"] == Reason.TP_HIT
+                else None  # time stop / end of data: market exit, no intended level
+            ),
             filled_price=exit_px, qty=qty, fees=round(float(slot["fees"]), 6), funding=0.0,
             reason_code=";".join([trade["exit_reason"], *events]) if events else trade["exit_reason"],
             realized_pnl=round(net_for_breakers, 6),
@@ -442,14 +446,28 @@ class TrendPullbackStrategy(Strategy):
         self.slot = None
 
     def on_order_rejected(self, event: Any) -> None:
-        reason = getattr(event, "reason", "")
+        reason = str(getattr(event, "reason", "") or "")
+        symbol = event.instrument_id.symbol.value
         self._log(ts=datetime.fromtimestamp(int(event.ts_event) / 1e9, tz=timezone.utc).isoformat(),
-                  symbol=event.instrument_id.symbol.value, side="", action="ORDER_REJECTED",
+                  symbol=symbol, side="", action="ORDER_REJECTED",
                   intended_price=None, filled_price=None, qty=None, fees=0.0, funding=0.0,
-                  reason_code=f"REJECTED:{reason}")
-        if self.slot is not None and self.slot["state"] == "pending" \
-                and event.client_order_id.value == self.slot["entry_client_order_id"]:
+                  reason_code=f"REJECTED:{reason[:120]}")
+        slot = self.slot
+        if slot is None or symbol != slot["symbol"]:
+            return
+        if slot["state"] == "pending" and event.client_order_id.value == slot["entry_client_order_id"]:
             self.slot = None
+            return
+        if slot["state"] == "open" and "STOP_MARKET" in reason.upper():
+            # The entry filled in a bar that already traded through the stop level, so the
+            # resting stop is rejected as "in the market". Live exchange-side SL would fire
+            # immediately; mirror that by closing at market now (taker, worse than planned).
+            instrument = self._instruments[symbol]
+            slot["exit_reason"] = Reason.STOP_HIT
+            slot["exit_taker"] = True
+            self.cancel_all_orders(instrument.id)
+            for position in self.cache.positions_open(instrument_id=instrument.id):
+                self.close_position(position)
 
     def on_order_denied(self, event: Any) -> None:
         self.on_order_rejected(event)

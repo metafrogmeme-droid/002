@@ -107,7 +107,7 @@ strategy_config:
   # --- replay controls ---
   backtest_days: 730
   warmup_days: 45
-  backtest_fetch_budget_seconds: 95
+  backtest_fetch_budget_seconds: 120
   # Authoring-time snapshot of Bitget USDT-FUTURES contract rules (2026-10-09);
   # live code prefers trade.helpers.contract_rules and falls back to this.
   instrument_rules_snapshot:

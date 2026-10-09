@@ -83,6 +83,12 @@ def run() -> None:
             continue
         # Equal share of the fetch budget per symbol so coverage stays comparable.
         deadline = started + timedelta(seconds=fetch_budget * (index + 1) / len(symbols))
+        # Funding first (few, small requests) so a slow kline path never silently
+        # drops the funding feature; kline truncation shortens the window instead.
+        funding, funding_report = features.fetch_funding_window(
+            symbol, exchange=exchange, start=fetch_start, end=window_end, deadline=deadline
+        )
+        coverage["funding"][symbol] = funding_report
         bars, bar_report = features.fetch_klines_window(
             symbol, exchange=exchange, start=fetch_start, end=window_end, deadline=deadline
         )
@@ -90,10 +96,6 @@ def run() -> None:
         if bars.empty or len(bars) < int(params["ema_slow_period"]) + 50:
             coverage["bars"][symbol]["dropped"] = "insufficient bars"
             continue
-        funding, funding_report = features.fetch_funding_window(
-            symbol, exchange=exchange, start=fetch_start, end=window_end, deadline=deadline
-        )
-        coverage["funding"][symbol] = funding_report
         frame = features.build_replay_frame(bars, funding, params)
         frame = frame[frame.index >= pd.Timestamp(max(window_start, bars.index.min().to_pydatetime()))]
         frames[symbol] = frame
