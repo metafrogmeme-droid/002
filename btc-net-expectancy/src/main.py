@@ -562,7 +562,9 @@ def _run_live() -> None:
     leverage = min(int(cfg["leverage"]), 5)
     rules = trade.helpers.contract_rules(SYMBOL)
     tick = Decimal(str(rules.price_step))
-    entry = ((bid - tick) / tick).to_integral_value(rounding=ROUND_DOWN) * tick
+    entry = (
+        (bid - Decimal(str(cfg["limit_offset_atr"])) * atr) / tick
+    ).to_integral_value(rounding=ROUND_DOWN) * tick
     stop_distance = Decimal(str(cfg["atr_stop_multiple"])) * atr
     stop = ((entry - stop_distance) / tick).to_integral_value(rounding=ROUND_DOWN) * tick
     target = ((entry + Decimal(str(cfg["take_profit_r"])) * stop_distance) / tick).to_integral_value(rounding=ROUND_DOWN) * tick
