@@ -1,0 +1,36 @@
+{
+  "engine": "LOCAL-NAUTILUS-HARNESS",
+  "window": [
+    "2024-10-01",
+    "2026-10-01"
+  ],
+  "adx_trend_min": 30.0,
+  "trades": 240,
+  "events": {
+    "daily_pause": 10,
+    "daily_stop": 5,
+    "consecutive_loss_halt": 13
+  },
+  "skips": {
+    "symbol_busy": 94,
+    "time_stop_deferred_funding_window": 21,
+    "invalid_or_disallowed_signal": 287,
+    "funding_window": 23,
+    "funding_against": 1,
+    "paused": 2,
+    "size_exceeds_leverage_cap": 8
+  },
+  "ts_shift_ms": 0,
+  "win_rate": 0.3917,
+  "avg_r_gross": 0.0951,
+  "net_expectancy_r": -0.0093,
+  "profit_factor": 0.9812,
+  "net_pnl_usdt": -33.32,
+  "fees_usdt": 365.44,
+  "funding_usdt": 9.1,
+  "exit_reasons": {
+    "TIME_STOP": 105,
+    "EXIT_SL": 87,
+    "EXIT_TP": 48
+  }
+}

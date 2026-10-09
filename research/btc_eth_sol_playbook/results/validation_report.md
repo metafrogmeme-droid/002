@@ -78,6 +78,16 @@ Cost breakdown USDT: fees 298.1, slippage 1.3, funding 12.1; gross 296.0
 
 Refit on 2025-10-01 .. 2026-10-01: adx_trend_min = 30.0 (grid [{'value': 20.0, 'trades': 179, 'net_expectancy_r': -0.0896}, {'value': 25.0, 'trades': 121, 'net_expectancy_r': 0.0418}, {'value': 30.0, 'trades': 99, 'net_expectancy_r': 0.0446}])
 
+## v1 frozen parameters - engine comparison window (NOT out-of-sample)
+
+v1 parameters over the 24m test window; the threshold was fitted on data overlapping this window, so this is NOT out-of-sample. Used only to compare engines.
+
+| Run | Trades | Win rate | Avg R (gross) | Net expectancy (R) | PF | Max DD USDT (R) | Sharpe | Net PnL USDT |
+|---|---|---|---|---|---|---|---|---|
+| v1 (30.0) costs 0x, 2024-10-01 .. 2026-10-01 | 232 | 0.397 | 0.068 | 0.068 | 1.147 | 282.6 (18.8R) | 0.45 | 236.5 |
+| v1 (30.0) costs 1x, 2024-10-01 .. 2026-10-01 | 231 | 0.377 | 0.073 | 0.002 | 1.004 | 383.5 (25.6R) | 0.01 | 6.5 |
+| v1 (30.0) costs 2x, 2024-10-01 .. 2026-10-01 | 229 | 0.367 | 0.077 | -0.064 | 0.883 | 535.0 (35.7R) | -0.43 | -220.4 |
+
 ## Section 6 verdict
 
 ```

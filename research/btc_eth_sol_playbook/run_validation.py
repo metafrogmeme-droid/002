@@ -206,6 +206,15 @@ def main() -> None:
     # Stage 5
     freeze = fit_threshold(r, chosen, FREEZE_TRAIN)
     results["stage5_v1_freeze"] = {"train": FREEZE_TRAIN, **freeze}
+    v1_window = (FOLDS[0][1][0], FOLDS[-1][1][1])
+    results["v1_frozen_reference"] = {
+        "note": "v1 parameters over the 24m test window; the threshold was fitted on data overlapping this "
+                "window, so this is NOT out-of-sample. Used only to compare engines.",
+        "window": v1_window,
+        "param_value": freeze["chosen"],
+        "costs": {f"{cm:g}x": metrics(r.run(chosen, freeze["chosen"], v1_window, cost_mult=cm))
+                  for cm in (0.0, 1.0, 2.0)},
+    }
 
     # Section 6 verdict
     v = {}
@@ -302,7 +311,12 @@ def render_report(r: dict[str, Any]) -> str:
               f"Refit on {' .. '.join(r['stage5_v1_freeze']['train'])}: "
               f"{r['stage5_v1_freeze']['param']} = {r['stage5_v1_freeze']['chosen']} "
               f"(grid {r['stage5_v1_freeze']['grid']})",
-              "", "## Section 6 verdict", "", "```", json.dumps(r["section6_verdict"], indent=2), "```", ""]
+              "", "## v1 frozen parameters - engine comparison window (NOT out-of-sample)", "",
+              r["v1_frozen_reference"]["note"], "", hdr]
+    for k, m in r["v1_frozen_reference"]["costs"].items():
+        lines.append(_row(f"v1 ({r['v1_frozen_reference']['param_value']}) costs {k}, "
+                          f"{' .. '.join(r['v1_frozen_reference']['window'])}", m))
+    lines += ["", "## Section 6 verdict", "", "```", json.dumps(r["section6_verdict"], indent=2), "```", ""]
     return "\n".join(lines)
 
 
