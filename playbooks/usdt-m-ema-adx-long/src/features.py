@@ -165,17 +165,33 @@ def fetch_funding(symbol: str, start_ms: int, end_ms: int) -> tuple[list[dict[st
     raise DataCoverageError(f"{symbol}: funding_rate unavailable ({last_error})")
 
 
-def _with_epoch_ms(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Copy rows so both `time` and `timestamp` are millisecond epochs."""
+def _bars_for_replay(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Kline rows indexed by `time`. Drop `timestamp` so the joiner can create it."""
     normalized: list[dict[str, Any]] = []
     for row in rows:
         stamp = _time_ms(row)
         if stamp is None:
             continue
-        copied = dict(row)
+        copied = {key: value for key, value in row.items() if key != "timestamp"}
         copied["time"] = stamp
-        copied["timestamp"] = stamp
         normalized.append(copied)
+    return normalized
+
+
+def _funding_for_replay(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Funding rows indexed by `funding_ts`, not the reserved name `timestamp`."""
+    normalized: list[dict[str, Any]] = []
+    for row in rows:
+        stamp = _time_ms(row)
+        if stamp is None:
+            continue
+        try:
+            rate = float(row.get("funding_rate"))
+        except (TypeError, ValueError):
+            continue
+        if rate != rate or rate in (float("inf"), float("-inf")):
+            continue
+        normalized.append({"funding_ts": stamp, "funding_rate": rate})
     return normalized
 
 
@@ -184,12 +200,12 @@ def build_replay_frame(symbol: str, start_ms: int, end_ms: int) -> tuple[Any, di
     bars = fetch_klines(native, start_ms, end_ms)
     funding_rows, funding_symbol = fetch_funding(native, start_ms, end_ms)
     frame = backtest.build_feature_frame(
-        _with_epoch_ms(bars),
+        _bars_for_replay(bars),
         base_datetime_index="time",
         features=[
             backtest.FeatureSource(
-                data=_with_epoch_ms(funding_rows),
-                datetime_index="timestamp",
+                data=_funding_for_replay(funding_rows),
+                datetime_index="funding_ts",
                 include_columns=("funding_rate",),
                 mode="asof",
                 direction="backward",

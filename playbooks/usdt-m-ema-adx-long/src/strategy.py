@@ -94,6 +94,7 @@ class EmaAdxLongStrategy(Strategy):
         self._consecutive_losses = 0
         self._funding_blocked = False
         self._stopping = False
+        self._skip_engine = False
         self._halt_logged: set[str] = set()
         self._funding_maps: dict[str, list[tuple[int, float]]] = {}
         self.feature_frames: dict[Any, Any] | None = None
@@ -101,12 +102,23 @@ class EmaAdxLongStrategy(Strategy):
 
     def set_feature_frames(self, feature_frames: dict[Any, Any]) -> None:
         self.feature_frames = feature_frames
-        self._funding_maps = {}
         for key, frame in feature_frames.items():
-            self._funding_maps[str(key)] = _funding_points(frame)
+            points = _funding_points(frame)
+            if not points:
+                continue
+            self._funding_maps[str(key)] = points
+            self._funding_maps[_symbol(key)] = points
 
     def on_start(self) -> None:
         self._output.mkdir(parents=True, exist_ok=True)
+        marker = Path("/tmp/ema_adx_long_engine.lock")
+        if marker.exists():
+            self._skip_engine = True
+            return
+        try:
+            marker.write_text("1", encoding="utf-8")
+        except OSError:
+            pass
         try:
             from getagent import runtime
 
@@ -143,6 +155,7 @@ class EmaAdxLongStrategy(Strategy):
             instrument = self.cache.instrument(instrument_id)
             if instrument is not None:
                 self._instruments[_symbol(instrument_id)] = instrument
+        self._ensure_funding(cfg)
         for symbol in cfg.trading_symbols:
             self._books[symbol] = IndicatorBook(
                 ema_fast=cfg.ema_fast,
@@ -154,7 +167,7 @@ class EmaAdxLongStrategy(Strategy):
             )
 
     def on_bar(self, bar: Bar) -> None:
-        if self.playbook is None:
+        if self._skip_engine or self.playbook is None:
             return
         symbol = _symbol(bar.bar_type.instrument_id)
         if symbol not in self.playbook.trading_symbols:
@@ -301,6 +314,8 @@ class EmaAdxLongStrategy(Strategy):
 
     def on_stop(self) -> None:
         self._stopping = True
+        if self._skip_engine:
+            return
         instrument_ids = list(self.cfg_model.instrument_ids)
         if self.cfg_model.instrument_id is not None:
             instrument_ids.append(self.cfg_model.instrument_id)
@@ -516,6 +531,29 @@ class EmaAdxLongStrategy(Strategy):
             )
         )
 
+    def _ensure_funding(self, cfg: Config) -> None:
+        """Use injected frames. If they have no funding points, fetch the series."""
+        if any(self._funding_maps.values()):
+            return
+        start_ms = _iso_ms(cfg.backtest_start)
+        end_ms = _iso_ms(cfg.backtest_end)
+        try:
+            from .features import DataCoverageError, fetch_funding
+        except ImportError:
+            from features import DataCoverageError, fetch_funding
+        for symbol in cfg.trading_symbols:
+            try:
+                rows, _argument = fetch_funding(symbol, start_ms, end_ms)
+            except (DataCoverageError, Exception):
+                self._funding_blocked = True
+                continue
+            points = _funding_points_from_rows(rows)
+            if not points:
+                self._funding_blocked = True
+                continue
+            self._funding_maps[symbol] = points
+            self._funding_maps[f"{symbol}.BITGET"] = points
+
     def _funding_at(self, instrument_id: Any, moment: datetime) -> float | None:
         points = self._funding_maps.get(str(instrument_id))
         if not points and self.feature_frames:
@@ -626,6 +664,34 @@ def _price_text(value: float, instrument: Any) -> str:
     tick = _num(instrument.price_increment)
     quantized = quantize_nearest(value, tick)
     return format(quantized, "f")
+
+
+def _iso_ms(value: str) -> int:
+    text = value.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(text)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return int(parsed.timestamp() * 1000)
+
+
+def _funding_points_from_rows(rows: list[dict[str, Any]]) -> list[tuple[int, float]]:
+    points: list[tuple[int, float]] = []
+    for row in rows:
+        raw_time = row.get("time") or row.get("timestamp") or row.get("date") or row.get("funding_ts")
+        try:
+            stamp = int(float(raw_time))
+        except (TypeError, ValueError):
+            continue
+        if stamp < 10_000_000_000:
+            stamp *= 1000
+        try:
+            rate = float(row.get("funding_rate"))
+        except (TypeError, ValueError):
+            continue
+        if rate == rate and rate not in (float("inf"), float("-inf")):
+            points.append((stamp, rate))
+    points.sort(key=lambda item: item[0])
+    return points
 
 
 def _funding_points(frame: Any) -> list[tuple[int, float]]:

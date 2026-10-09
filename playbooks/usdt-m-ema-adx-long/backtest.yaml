@@ -60,7 +60,3 @@ instruments:
 execution:
   start: "2024-10-09T00:00:00Z"
   end: "2026-10-09T00:00:00Z"
-
-data_requirements:
-  required_bar_fields:
-    - funding_rate
