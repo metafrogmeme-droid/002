@@ -1,0 +1,261 @@
+{
+ "note": "Trimmed copy of the official GetAgent sandbox run record for v1 (frozen baseline). Full order/fill/position tables live in the run's backtest_report.json artifact; no credentials included.",
+ "run_id": "pbrun-e614071ce270",
+ "playbook_id": "1f0ba5ba-015a-4783-bd3a-76b52e11c0b2",
+ "strategy_id": "b15aa446-c912-46a0-8e34-a90eeaa7fd47",
+ "run_type": "backtest",
+ "status": "completed",
+ "started_at": "2026-10-09T19:49:59.126427+00:00",
+ "ended_at": "2026-10-09T19:52:27.559494+00:00",
+ "active_runtime_ms": 148427,
+ "metrics_output": {
+  "engine": "nautilus_trader",
+  "summary": {
+   "engine": "nautilus_trader",
+   "account_currency": "USDT",
+   "starting_balance": 100000.0,
+   "ending_balance": 99878.18914588,
+   "net_pnl": -121.81085412,
+   "total_return_pct": -0.1218,
+   "sharpe_ratio": -0.2578,
+   "max_drawdown_pct": 0.3243,
+   "win_rate": 0.452962,
+   "win_rate_pct": 45.2962,
+   "profit_factor": 1.0665,
+   "total_trades": 574,
+   "fill_count": 574,
+   "position_count": 287
+  },
+  "stats": {
+   "returns": {
+    "Returns Volatility (252 days)": 0.0016358491684734934,
+    "Average (Return)": -1.6735548529786988e-06,
+    "Average Loss (Return)": -0.00010612703260600383,
+    "Average Win (Return)": 0.0001684511594075521,
+    "Sharpe Ratio (252 days)": -0.25780850158953134,
+    "Sortino Ratio (252 days)": -0.3901891264227943,
+    "Profit Factor": 0.9314457979945385,
+    "Risk Return Ratio": -0.016240409073430953
+   },
+   "general": {
+    "Long Ratio": 1.0
+   },
+   "pnls": {
+    "PnL (total)": -121.81085412,
+    "PnL% (total)": -0.12181085411999083,
+    "Max Winner": 29.582141,
+    "Avg Winner": 15.832510657952763,
+    "Min Winner": 0.2530879,
+    "Min Loser": -0.1738086,
+    "Avg Loser": -13.328373172999997,
+    "Max Loser": -29.582436,
+    "Expectancy": -0.4244280631358835,
+    "Win Rate": 0.4425087108013937
+   }
+  },
+  "diagnostics": {
+   "fees": {
+    "configured_fee_rates": {
+     "BTCUSDT.BITGET": {
+      "maker_fee": 0.0002,
+      "taker_fee": 0.0006
+     },
+     "ETHUSDT.BITGET": {
+      "maker_fee": 0.0002,
+      "taker_fee": 0.0006
+     },
+     "SOLUSDT.BITGET": {
+      "maker_fee": 0.0002,
+      "taker_fee": 0.0006
+     }
+    },
+    "fill_count": 574,
+    "estimated_notional": 731045.0483,
+    "estimated_taker_fees": 438.62702898
+   },
+   "optional_reports": {},
+   "optional_stats": {},
+   "artifacts": {
+    "backtest_report": {
+     "artifact_path": "playbooks/1f0ba5ba-015a-4783-bd3a-76b52e11c0b2/output/backtest_report.json",
+     "exists": true,
+     "size_bytes": 2710656,
+     "read_bytes": 2710656,
+     "sha256": "aa9680e5f41969f894cce150972c1d92575dfe2ea9f2216d6ed988bb4bf8ad07",
+     "parse_status": "parsed",
+     "top_level_keys": [
+      "account_currency",
+      "config",
+      "diagnostics",
+      "ending_balance",
+      "engine",
+      "fill_count",
+      "max_drawdown_pct",
+      "metrics_basis_note",
+      "net_pnl",
+      "position_count",
+      "profit_factor",
+      "reports",
+      "sharpe_ratio",
+      "starting_balance",
+      "stats",
+      "summary",
+      "total_return_pct",
+      "total_trades",
+      "win_rate",
+      "win_rate_pct"
+     ],
+     "report_keys": [
+      "account",
+      "fills",
+      "orders",
+      "positions"
+     ],
+     "account_count": 2494,
+     "order_count": 1321,
+     "fill_count": 574,
+     "position_count": 287,
+     "non_finite_value_count": 0,
+     "drop_reason": "",
+     "max_bytes": 52428800,
+     "read_mode": "ranged"
+    }
+   }
+  },
+  "account_currency": "USDT",
+  "starting_balance": 500.0,
+  "ending_balance": 99878.18914588,
+  "net_pnl": -157.122,
+  "total_return_pct": -31.4244,
+  "sharpe_ratio": -0.2578,
+  "max_drawdown_pct": 64.9386,
+  "win_rate": 0.452962,
+  "win_rate_pct": 45.2962,
+  "profit_factor": 1.0665,
+  "total_trades": 574,
+  "fill_count": 574,
+  "position_count": 287,
+  "metrics_basis_note": "net_pnl is net of engine fees + modelled slippage + funding (1x); denominator margin_budget",
+  "net_expectancy_r": -0.0361,
+  "avg_r": -0.0361,
+  "net_pnl_0x": 168.6874,
+  "net_pnl_2x": -482.9313,
+  "profit_factor_2x": 0.802,
+  "effective_days": 729.96,
+  "funding_known": true,
+  "rows": 52560,
+  "engine_total_return_pct_account": -0.1218,
+  "engine_sharpe_ratio": -0.2578,
+  "account_total_return_pct": -31.4244,
+  "account_max_drawdown_pct": 64.9386,
+  "metrics_basis": "strategy",
+  "margin_budget": 500.0,
+  "equity_curve_point_count": 17520,
+  "actual_window_start": "2024-10-09T19:00:00+00:00",
+  "actual_window_end": "2026-10-09T18:00:00+00:00"
+ },
+ "signal_output": [
+  {
+   "type": "signal",
+   "timestamp": "2026-10-09T19:51:12.847008+00:00",
+   "action": "watch",
+   "symbol": "BTCUSDT",
+   "confidence": 0.4286,
+   "metrics": {
+    "total_return_pct": -31.424400000000002,
+    "net_pnl": -157.122,
+    "starting_balance": 500.0,
+    "sharpe_ratio": -0.3921,
+    "max_drawdown_pct": 64.9386,
+    "win_rate": 0.4286,
+    "total_trades": 287,
+    "profit_factor": 0.9281,
+    "net_expectancy_r": -0.0361,
+    "avg_r": -0.0361,
+    "net_pnl_0x": 168.6874,
+    "net_pnl_2x": -482.9313,
+    "profit_factor_2x": 0.802,
+    "effective_days": 729.96,
+    "funding_known": true,
+    "rows": 52560,
+    "engine_total_return_pct_account": -0.1218,
+    "engine_sharpe_ratio": -0.2578
+   },
+   "meta": {
+    "chart_path": "/workspace/output/backtest_chart_13b64e7a.png",
+    "effective_window": {
+     "start": "2024-10-09T19:00:00+00:00",
+     "end": "2026-10-09T18:00:00+00:00",
+     "days": 729.96,
+     "requested_days": 730
+    },
+    "cost_sensitivity_verdict": "REJECT (negative net at 2x costs)",
+    "verdict_allowed": true,
+    "exits_by_reason": {
+     "STOP_HIT": 115,
+     "TP_HIT": 41,
+     "TIME_STOP": 131
+    },
+    "skip_counts": {
+     "DI_BEARISH": 12753,
+     "NO_TREND": 22519,
+     "BELOW_SLOW_EMA": 1634,
+     "VOL_RANK_LOW": 1351,
+     "OVEREXTENDED": 1945,
+     "SLOT_OCCUPIED": 2975,
+     "FUNDING_WINDOW": 137,
+     "VOL_RANK_HIGH": 723,
+     "DAILY_PAUSE": 60,
+     "LOSS_STREAK_HALT": 423,
+     "FUNDING_COST": 327
+    },
+    "funding_gate_active": true,
+    "forward_criteria": {
+     "pass": "PF >= 1.3 AND Sharpe >= 0.5 after >= 30 live trades",
+     "fail": "PF <= 1.1 -> stop",
+     "status": "PENDING (no live trades yet)"
+    },
+    "reason_code": "OK"
+   }
+  }
+ ],
+ "evidence_summary": {
+  "window": {
+   "start_at": "2024-10-09T19:00:00+00:00",
+   "end_at": "2026-10-09T18:00:00+00:00"
+  },
+  "initial_nav": 1.0,
+  "final_nav": 0.685756,
+  "total_return_pct": -31.4244,
+  "max_drawdown_pct": 64.9386,
+  "total_trades": 574,
+  "win_rate_pct": 45.2962,
+  "sharpe_ratio": -0.2578,
+  "curve_hash": "8a56903fc4bdc9eb81856fefc6d5820e68b86cfc2959a8f964661517f8e6c443",
+  "completed_at": "2026-10-09T19:52:27.559494+00:00",
+  "nav_curve_points": 2000
+ },
+ "engine_report_counts": {
+  "orders": 1321,
+  "fills": 574,
+  "positions": 287,
+  "order_status": {
+   "CANCELED": 741,
+   "FILLED": 574,
+   "REJECTED": 6
+  },
+  "order_types": {
+   "LIMIT/BUY": 610,
+   "LIMIT/SELL": 287,
+   "STOP_MARKET/SELL": 287,
+   "MARKET/SELL": 137
+  },
+  "fill_liquidity": {
+   "MAKER": 289,
+   "TAKER": 285
+  },
+  "positions_realized_pnl_sum_usdt": -121.8109,
+  "winning_positions": 127,
+  "losing_positions": 160
+ }
+}
