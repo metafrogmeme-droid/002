@@ -18,12 +18,11 @@ description_i18n:
   vi: "Playbook xu hướng USDT-M chỉ long trên perp BTC, ETH, SOL với lọc chế độ và trần rủi ro tiểu khoản isolated"
 long_description: |
   This Playbook is a long-only trend-following strategy on liquid USDT-margined
-  perpetual futures. It is built on the assumption that when a market is already
+  perpetual futures. It is built on the assumption that when a market is
   stretching in a directional way and volatility is neither dead nor chaotic,
   price tends to travel with that direction long enough to pay a defined risk
-  unit. The aim is verifiable net expectancy after fees, funding, and slippage,
-  not a decorative headline return. It is intended to run in an isolated
-  sub-account so foreign inventory cannot be mistaken for strategy risk.
+  unit. The aim is verifiable net expectancy after costs, not headline return.
+  It is intended to run in an isolated sub-account.
 
   Entry waits for a bullish moving-average stack, a momentum-strength reading
   that has just crossed from quiet into a trending regime, and a volume

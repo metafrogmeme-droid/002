@@ -1,6 +1,4 @@
 """Live isolated-limit execution. Mutations run only inside emit_signal_or_follow."""
-from __future__ import annotations
-
 from decimal import Decimal
 from typing import Any
 

@@ -1,6 +1,4 @@
 """Historical path: fetch Bitget 1H perps, replay, write real evidence files."""
-from __future__ import annotations
-
 import json
 import math
 from datetime import datetime, timedelta, timezone

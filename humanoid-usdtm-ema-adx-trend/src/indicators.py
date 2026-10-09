@@ -1,6 +1,4 @@
 """Pure indicator helpers shared by live and replay paths."""
-from __future__ import annotations
-
 import math
 from typing import Sequence
 

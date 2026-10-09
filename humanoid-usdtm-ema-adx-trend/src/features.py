@@ -1,6 +1,4 @@
 """Feature assembly for live scans and historical replay frames."""
-from __future__ import annotations
-
 import math
 from typing import Any
 

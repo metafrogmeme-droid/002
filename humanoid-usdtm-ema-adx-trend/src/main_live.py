@@ -1,6 +1,4 @@
 """Live path: deterministic EMA-ADX long, optional AI veto, isolated limit+TPSL."""
-from __future__ import annotations
-
 import json
 from datetime import datetime, timezone
 from pathlib import Path

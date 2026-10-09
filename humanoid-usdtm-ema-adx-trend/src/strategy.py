@@ -1,6 +1,4 @@
 """Nautilus replay strategy for the EMA-ADX long-only trend Playbook."""
-from __future__ import annotations
-
 import math
 from collections import defaultdict, deque
 from decimal import Decimal

@@ -1,6 +1,4 @@
 """Risk, halt, and funding-clock helpers. Values are read from strategy_config."""
-from __future__ import annotations
-
 from datetime import datetime, timezone
 from typing import Any
 
