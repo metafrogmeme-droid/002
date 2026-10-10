@@ -255,22 +255,35 @@ def _load_trades() -> list[ClosedTrade]:
     return trades
 
 
+def _curve_timestamp(value: str) -> str:
+    """UTC timestamp without a suffix, the shape the equity-curve reader accepts."""
+    text = value.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(text)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
+
+
 def _write_equity(trades: list[ClosedTrade], start_equity: float, start_iso: str) -> None:
-    points = [("timestamp,value,nav",)]
+    """Write the closed-trade equity path. No interpolated points are added."""
     lines = ["timestamp,value,nav"]
     equity = start_equity
-    lines.append(f"{start_iso},{equity},{1.0 if start_equity else 0.0}")
+    lines.append(f"{_curve_timestamp(start_iso)},{equity},{1.0 if start_equity else 0.0}")
     for trade in trades:
         net = trade.net(1.0)
         if net is None:
             continue
         equity += net
         nav = equity / start_equity if start_equity else 0.0
-        lines.append(f"{trade.exit_ts},{equity},{nav}")
+        lines.append(f"{_curve_timestamp(trade.exit_ts)},{equity},{nav}")
     if len(lines) == 1:
         return
-    (OUTPUT / "equity_curve.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    del points
+    text = "\n".join(lines) + "\n"
+    OUTPUT.mkdir(parents=True, exist_ok=True)
+    (OUTPUT / "equity_curve.csv").write_text(text, encoding="utf-8")
+    local = Path("output")
+    local.mkdir(parents=True, exist_ok=True)
+    (local / "equity_curve.csv").write_text(text, encoding="utf-8")
 
 
 def _fail(reason: str, coverage: list[dict[str, Any]] | None = None) -> None:
