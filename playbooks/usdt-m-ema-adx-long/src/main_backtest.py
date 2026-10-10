@@ -126,10 +126,9 @@ def _finish(cfg: Any, result: Any, coverage: list[dict[str, Any]], start_ms: int
     if isinstance(reports, dict):
         reports.pop("equity_curve", None)
     _write_equity(trades, cfg.margin_budget, cfg.backtest_start)
-    (OUTPUT / "backtest_report.json").write_text(
-        json.dumps(_clean(raw), default=str),
-        encoding="utf-8",
-    )
+    report_text = json.dumps(_clean(raw), default=str)
+    for directory in _output_dirs():
+        (directory / "backtest_report.json").write_text(report_text, encoding="utf-8")
     (OUTPUT / "data_coverage.json").write_text(
         json.dumps(_clean({"coverage_ok": coverage_ok, "symbols": coverage}), default=str),
         encoding="utf-8",
@@ -264,26 +263,52 @@ def _curve_timestamp(value: str) -> str:
     return parsed.astimezone(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
 
 
+def _output_dirs() -> list[Path]:
+    """Every directory the runner may scan for this package's output files."""
+    candidates = [
+        OUTPUT,
+        Path.cwd() / "output",
+        Path(__file__).resolve().parents[1] / "output",
+    ]
+    dirs: list[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        try:
+            key = str(path.resolve())
+        except OSError:
+            key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        path.mkdir(parents=True, exist_ok=True)
+        dirs.append(path)
+    return dirs
+
+
 def _write_equity(trades: list[ClosedTrade], start_equity: float, start_iso: str) -> None:
     """Write the closed-trade equity path. No interpolated points are added."""
-    lines = ["timestamp,value,nav"]
-    equity = start_equity
-    lines.append(f"{_curve_timestamp(start_iso)},{equity},{1.0 if start_equity else 0.0}")
+    ordered: list[tuple[str, ClosedTrade]] = []
     for trade in trades:
         net = trade.net(1.0)
         if net is None:
             continue
-        equity += net
+        ordered.append((_curve_timestamp(trade.exit_ts), trade))
+    ordered.sort(key=lambda item: item[0])
+    lines = ["timestamp,value,nav"]
+    equity = start_equity
+    lines.append(f"{_curve_timestamp(start_iso)},{equity},{1.0 if start_equity else 0.0}")
+    for exit_ts, trade in ordered:
+        net = trade.net(1.0)
+        if net is None:
+            continue
+        equity += float(net)
         nav = equity / start_equity if start_equity else 0.0
-        lines.append(f"{_curve_timestamp(trade.exit_ts)},{equity},{nav}")
+        lines.append(f"{exit_ts},{equity},{nav}")
     if len(lines) == 1:
         return
     text = "\n".join(lines) + "\n"
-    OUTPUT.mkdir(parents=True, exist_ok=True)
-    (OUTPUT / "equity_curve.csv").write_text(text, encoding="utf-8")
-    local = Path("output")
-    local.mkdir(parents=True, exist_ok=True)
-    (local / "equity_curve.csv").write_text(text, encoding="utf-8")
+    for directory in _output_dirs():
+        (directory / "equity_curve.csv").write_text(text, encoding="utf-8")
 
 
 def _fail(reason: str, coverage: list[dict[str, Any]] | None = None) -> None:
