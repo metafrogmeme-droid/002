@@ -1,9 +1,9 @@
 # SOL Net Expectancy
 
-**Research status:** rejected and fail-closed. `activation_eligible` is `false`;
-live execution emits `RESEARCH_VALIDATION_FAILED` and places no order. Do not
-activate this package unless a later, separately validated version passes every
-declared evidence gate.
+**Forward status:** `PENDING_FORWARD`. Historical fees and slippage pass the
+declared robustness gates, but complete historical funding and account-tier
+fees are unavailable. Live execution is enabled only for user-controlled
+forward validation and still fails closed on every declared runtime risk gate.
 
 ## 策略 / Strategy
 
