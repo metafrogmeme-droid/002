@@ -17,6 +17,7 @@ from params import ConfigError, load_config  # noqa: E402
 from report import activation_verdict  # noqa: E402
 from risk import (  # noqa: E402
     ClosedTrade,
+    align_ohlc_to_tick,
     exposure_hits_blackout,
     millis_from_bar_clock,
     ohlc_is_valid,
@@ -192,6 +193,14 @@ class RiskTests(unittest.TestCase):
     def test_bar_with_low_above_open_is_not_replayed(self):
         self.assertTrue(ohlc_is_valid(100.0, 101.0, 99.0, 100.5))
         self.assertFalse(ohlc_is_valid(100.0, 101.0, 100.1, 100.5))
+        self.assertIsNone(align_ohlc_to_tick(100.0, 101.0, 100.1, 100.5, 0.01))
+        self.assertEqual(align_ohlc_to_tick(100.0, 101.0, 99.0, 100.5, 0.01), (100.0, 101.0, 99.0, 100.5))
+        self.assertIsNone(align_ohlc_to_tick(100.004, 100.02, 100.006, 100.01, 0.01))
+        # A valid print that still satisfies the 0.01 grid is not rewritten.
+        self.assertEqual(
+            align_ohlc_to_tick(100.006, 100.02, 100.004, 100.01, 0.01),
+            (100.006, 100.02, 100.004, 100.01),
+        )
 
     def test_funding_gap_is_reported_and_not_filled(self):
         day = 24 * 60 * 60 * 1000

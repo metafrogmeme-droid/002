@@ -42,6 +42,31 @@ def ohlc_is_valid(open_: float, high: float, low: float, close: float) -> bool:
     return low <= high and low <= open_ and low <= close and high >= open_ and high >= close
 
 
+def align_ohlc_to_tick(
+    open_: float, high: float, low: float, close: float, tick: float
+) -> tuple[float, float, float, float] | None:
+    """Return a bar the replay engine can accept, or None when it is not a price.
+
+    Prints that stay inside low <= open/close <= high after the exchange
+    increment are returned unchanged. A bar that breaks that rule only once
+    prices sit on the increment is pulled back onto that same grid. Nothing
+    is interpolated and no strategy threshold changes.
+    """
+    if not ohlc_is_valid(open_, high, low, close) or tick <= 0:
+        return None
+    o = quantize_nearest(open_, tick)
+    h = quantize_nearest(high, tick)
+    l = quantize_nearest(low, tick)
+    c = quantize_nearest(close, tick)
+    if l <= o and l <= c and h >= o and h >= c and l <= h:
+        return (open_, high, low, close)
+    low_q = min(o, c)
+    high_q = max(o, c, h)
+    if low_q <= 0 or high_q < low_q:
+        return None
+    return (float(o), float(high_q), float(low_q), float(c))
+
+
 def funding_series_gap_ms(stamps: Sequence[int], max_gap_ms: int) -> int | None:
     """Largest hole between stamps, or None when every step is inside the cap.
 

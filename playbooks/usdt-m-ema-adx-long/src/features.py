@@ -19,6 +19,13 @@ except ImportError:
 
 
 HOUR_MS = 60 * 60 * 1000
+# Exchange price increments from the Bitget contract config recorded in
+# backtest.yaml. Used only so a bar can sit on the replay engine's price grid.
+_PRICE_TICK = {
+    "BTCUSDT": 0.1,
+    "ETHUSDT": 0.01,
+    "SOLUSDT": 0.001,
+}
 # Stay under the 1000-row cap and the 90-day window. A full 1000-row
 # request is end-anchored, so a 900-hour page keeps the first bar.
 KLINE_CHUNK_MS = 900 * HOUR_MS
@@ -476,6 +483,7 @@ def build_replay_frame(symbol: str, start_ms: int, end_ms: int) -> tuple[Any, di
         raise DataCoverageError(f"{symbol}: replay frame is missing funding_rate")
     replay_bars = _bars_for_replay(bars)
     frame = _restore_kline_prices(frame, replay_bars)
+    frame = _fit_replay_prices(frame, native)
     if len(frame) == 0:
         raise DataCoverageError(f"{symbol}: no valid OHLC bars remain after the funding join")
     frame = _restore_utc_index(frame)
@@ -507,6 +515,59 @@ def build_replay_frame(symbol: str, start_ms: int, end_ms: int) -> tuple[Any, di
         "index_last": index_max.isoformat(),
     }
     return frame, coverage
+
+
+def _fit_replay_prices(frame: Any, symbol: str) -> Any:
+    """Drop bars the replay engine will reject, and snap only those bars.
+
+    `build_feature_frame` can leave a price column off the exchange print.
+    A bar whose low sits above open or close once it is on the contract
+    increment is rewritten onto that increment. Every other print is kept.
+    """
+    try:
+        from .risk import align_ohlc_to_tick
+    except ImportError:
+        from risk import align_ohlc_to_tick
+
+    if len(frame) == 0:
+        return frame
+    work = frame.copy()
+    if bool(getattr(work.index, "has_duplicates", False)):
+        work = work[~work.index.duplicated(keep="last")]
+    tick = _PRICE_TICK.get(symbol)
+    keep: list[bool] = []
+    for ts in list(work.index):
+        try:
+            open_ = float(work.at[ts, "open"])
+            high = float(work.at[ts, "high"])
+            low = float(work.at[ts, "low"])
+            close = float(work.at[ts, "close"])
+        except (TypeError, ValueError, KeyError):
+            keep.append(False)
+            continue
+        if tick is None:
+            keep.append(True)
+            continue
+        fitted = align_ohlc_to_tick(open_, high, low, close, tick)
+        if fitted is None:
+            keep.append(False)
+            continue
+        fitted_open, fitted_high, fitted_low, fitted_close = fitted
+        if (fitted_open, fitted_high, fitted_low, fitted_close) != (open_, high, low, close):
+            work.at[ts, "open"] = fitted_open
+            work.at[ts, "high"] = fitted_high
+            work.at[ts, "low"] = fitted_low
+            work.at[ts, "close"] = fitted_close
+        keep.append(True)
+    if keep and not all(keep):
+        work = work.iloc[[i for i, ok in enumerate(keep) if ok]]
+    ordered = [
+        column
+        for column in ("open", "high", "low", "close", "volume", "funding_rate")
+        if column in work.columns
+    ]
+    extras = [column for column in work.columns if column not in ordered]
+    return work.loc[:, ordered + extras]
 
 
 def _restore_kline_prices(frame: Any, bars: list[dict[str, Any]]) -> Any:
