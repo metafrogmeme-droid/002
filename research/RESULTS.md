@@ -50,3 +50,17 @@ Chosen full-period run is A, because 31 is the unique maximum train trade count 
 - engine account 100000.00000000 → 99959.62437622 across 204 points and 63 unique totals; fills 62, positions 31, identity agrees
 
 Gates: trades 31 ≥ 30 pass; 1x > 0 fail; 2x ≥ 0 fail; test expectancy positive and the same sign as train fail. Not published. Published version stays server 0.0.3.
+
+## Round 2 follow-up
+
+Two harness defects were fixed before any new measurement. The predictions in `687ca85` were not rewritten.
+
+The coverage tail is one bar interval plus one hour. On 1H that is still two hours. A 4H bar timestamp four hours before the window end is inside the tail. Commit `5247869`.
+
+A native 4H bar type still placed no orders after that fix (`pbrun-a90f884eaf4c`, coverage_ok true, 0 orders). The engine stays on 1H bars. When `bar_hours` is 4, the strategy folds four hourly bars and runs the signal only on that closed 4H bar. Commit `df23200`. Bar counts are reported in `dce1eb4`. The published defaults stay 1H, cross, 8 hour time stop, 15 USDT, 10x, and the −40 USDT halt. `window_label: test` is only a replay label (`75add79`).
+
+T4 train, `pbrun-4642bd937f30`, replay mode: fresh train window 2024-10-09 to 2026-04-09, 1H engine bars folded into closed 4H bars, time stop 32 hours. Upload, run, and poll HTTP 200. coverage_ok true. Bars seen 39384. Closed 4H bars 9843. Trades 0. 0x, 1x, 2x, cost drag, and PF are undefined. The drag prediction (about half of −0.081 R) cannot be scored. T4 did not beat the train baseline of −0.18129553073061996 R, so no combination was pre-registered or run.
+
+A fresh test window, `pbrun-94d7e2652b3f`, replay mode: new account from 2026-04-09T00:00:00Z to 2026-10-09T00:00:00Z, halts start at zero, indicators warm up inside the window. This is not the test split inside `pbrun-03b498910da3`, where the −40 USDT halt had already tripped. Upload, run, and poll HTTP 200. Pullback only. 13 trades, 0x −0.14153562640954875 R, 1x −0.23579914583117276 R, 2x −0.3300626652527967 R, cost drag −0.094263519421624 R, PF 0.5755048528484816, net −45.99068802596161 USDT. Fills 26, positions 13, identity agrees. coverage_ok true. `four_hour_closed` 0, which is the 1H path.
+
+A's full-period numbers stay the continuous replay `pbrun-03b498910da3`: 31 trades, 1x −0.08986471969338064 R, 2x −0.16998269711020933 R. Gates: trades pass; 1x fail; 2x fail; fresh test 1x is negative, so the positive-test gate fails. No other candidate led on train 1x with enough trades to run a second full period. Not published.
