@@ -290,7 +290,11 @@ def _exit_model() -> dict[str, Any]:
         return {"maker_tp": "unreadable"}
     if not isinstance(payload, dict):
         return {"maker_tp": "unreadable"}
-    return {"maker_tp": payload.get("maker_tp")}
+    return {
+        "maker_tp": payload.get("maker_tp"),
+        "bars_seen": payload.get("bars_seen"),
+        "four_hour_closed": payload.get("four_hour_closed"),
+    }
 
 
 def _liquidation_skips() -> dict[str, Any]:
