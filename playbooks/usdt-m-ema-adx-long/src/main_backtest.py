@@ -15,12 +15,12 @@ from getagent import backtest, runtime
 try:
     from .features import DataCoverageError, build_replay_frame
     from .params import ConfigError, load_config
-    from .report import activation_verdict, rule_trades, split_by_entry, summarize
+    from .report import activation_verdict, fill_identity, rule_trades, split_by_entry, summarize
     from .risk import ClosedTrade
 except ImportError:
     from features import DataCoverageError, build_replay_frame
     from params import ConfigError, load_config
-    from report import activation_verdict, rule_trades, split_by_entry, summarize
+    from report import activation_verdict, fill_identity, rule_trades, split_by_entry, summarize
     from risk import ClosedTrade
 
 
@@ -60,7 +60,9 @@ def _finish(cfg: Any, result: Any, coverage: list[dict[str, Any]], start_ms: int
         chart_path = backtest.generate_chart(result) or ""
     except Exception:
         chart_path = ""
-    trades = rule_trades(_load_trades())
+    loaded = _load_trades()
+    trades = rule_trades(loaded)
+    identity = fill_identity(len(loaded), _engine_count(result, "fill_count"), _engine_count(result, "position_count"))
     shutdowns = [
         trade for trade in _load_trades() if trade.reason_code == "BACKTEST_SHUTDOWN"
     ]
@@ -131,6 +133,12 @@ def _finish(cfg: Any, result: Any, coverage: list[dict[str, Any]], start_ms: int
             "not a better signal."
         ),
         "liquidation_skips": _liquidation_skips(),
+        "fill_identity": identity,
+        "window_label": cfg.window_label,
+        "entry_style": cfg.entry_style,
+        "exit_style": cfg.exit_style,
+        "htf_filter": cfg.htf_filter,
+        "research_side": cfg.research_side,
     }
     reports = raw.get("reports")
     if isinstance(reports, dict):
@@ -169,6 +177,9 @@ def _finish(cfg: Any, result: Any, coverage: list[dict[str, Any]], start_ms: int
                 "version_label": cfg.version_label,
                 "leverage": cfg.applied_leverage,
                 "liquidation_skips": _liquidation_skips(),
+                "fill_identity": identity,
+                "window_label": cfg.window_label,
+                "entry_style": cfg.entry_style,
                 "coverage": [
                     {
                         "symbol": item.get("symbol"),
@@ -233,6 +244,23 @@ def _pending_coverage(summary: dict[str, Any]) -> dict[str, Any]:
         "pending_reason": "kline or funding coverage does not span the declared 2y window",
         "provisional_status": summary.get("status"),
     }
+
+
+def _engine_count(result: Any, key: str) -> int | None:
+    direct = getattr(result, key, None)
+    if isinstance(direct, int):
+        return direct
+    summary = getattr(result, "summary", None)
+    if isinstance(summary, dict) and isinstance(summary.get(key), int):
+        return int(summary[key])
+    raw = getattr(result, "raw", None)
+    if isinstance(raw, dict):
+        summary = raw.get("summary")
+        if isinstance(summary, dict) and isinstance(summary.get(key), int):
+            return int(summary[key])
+        if isinstance(raw.get(key), int):
+            return int(raw[key])
+    return None
 
 
 def _liquidation_skips() -> dict[str, Any]:

@@ -99,6 +99,29 @@ def summarize(trades: Sequence[ClosedTrade], cost_multiplier: float, start_equit
     }
 
 
+def fill_identity(
+    author_round_trips: int,
+    engine_fills: int | None,
+    engine_positions: int | None,
+) -> dict[str, int | bool | None | str]:
+    """34 engine fills and 17 positions agree with 17 round trips when each has one entry and one exit."""
+    expected = author_round_trips * 2
+    fills_ok = isinstance(engine_fills, int) and engine_fills == expected
+    positions_ok = isinstance(engine_positions, int) and engine_positions == author_round_trips
+    agrees = fills_ok and positions_ok
+    note = "one entry fill and one exit fill per closed position"
+    if not agrees:
+        note = "engine fill or position count does not match the strategy round trips"
+    return {
+        "author_round_trips": author_round_trips,
+        "engine_fill_count": engine_fills,
+        "engine_position_count": engine_positions,
+        "expected_fills": expected,
+        "agrees": agrees,
+        "note": note,
+    }
+
+
 def rule_trades(trades: Sequence[ClosedTrade]) -> list[ClosedTrade]:
     """Drop end-of-replay flats that are not a strategy exit."""
     return [trade for trade in trades if trade.reason_code != "BACKTEST_SHUTDOWN"]
