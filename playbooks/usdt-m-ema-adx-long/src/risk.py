@@ -204,6 +204,71 @@ def plan_long_size(
     )
 
 
+def plan_short_size(
+    *,
+    close: float,
+    atr: float,
+    atr_stop_mult: float,
+    reward_r: float,
+    fixed_loss_usdt: float,
+    price_tick: float,
+    size_step: float,
+    min_qty: float,
+    min_notional_usdt: float,
+    leverage: int,
+    margin_remaining: float,
+) -> SizePlan:
+    """Mirror of the long plan. The stop is above entry. Size is not raised."""
+    if close <= 0 or atr <= 0 or atr_stop_mult <= 0 or reward_r <= 0:
+        return _reject("INVALID_SIGNAL")
+    if leverage < 1:
+        return _reject("SKIP_LEVERAGE_CAP")
+    entry = quantize_nearest(close, price_tick)
+    raw_stop = float(entry) + atr_stop_mult * atr
+    stop = quantize_ceil(raw_stop, price_tick)
+    distance = stop - entry
+    if distance <= 0 or entry <= 0:
+        return _reject("INVALID_SIGNAL")
+    liquidation_fraction = Decimal(1) / Decimal(leverage)
+    stop_fraction = distance / entry
+    if stop_fraction >= liquidation_fraction:
+        return _reject(
+            "SKIP_LIQUIDATION_INSIDE_STOP",
+            (
+                f"stop_fraction={stop_fraction} liquidation_fraction={liquidation_fraction} "
+                f"leverage={leverage}; isolated liquidation is inside the stop"
+            ),
+        )
+    risk_budget = _decimal(fixed_loss_usdt)
+    qty = quantize_floor(float(risk_budget / distance), size_step)
+    if qty < _decimal(min_qty):
+        return _reject("SKIP_SIZE")
+    actual_risk = qty * distance
+    if actual_risk > risk_budget:
+        return _reject("SKIP_SIZE")
+    notional = qty * entry
+    if notional < _decimal(min_notional_usdt):
+        return _reject("SKIP_MIN_NOTIONAL")
+    margin = notional / Decimal(leverage)
+    if margin > _decimal(margin_remaining):
+        return _reject("SKIP_MARGIN")
+    take_profit = quantize_nearest(float(entry - distance * _decimal(reward_r)), price_tick)
+    if take_profit >= entry or take_profit <= 0:
+        return _reject("INVALID_SIGNAL")
+    return SizePlan(
+        qty=qty,
+        entry=entry,
+        stop=stop,
+        take_profit=take_profit,
+        stop_distance=distance,
+        risk_usdt=actual_risk,
+        notional=notional,
+        margin=margin,
+        reason="TRIGGER_SHORT",
+        detail="",
+    )
+
+
 def _reject(reason: str, detail: str = "") -> SizePlan:
     zero = Decimal("0")
     return SizePlan(
@@ -297,9 +362,11 @@ class ClosedTrade:
     reason_code: str
 
     def gross(self) -> float:
-        if self.side != "long":
-            return 0.0
-        return (self.exit_price - self.entry_price) * self.qty
+        if self.side == "long":
+            return (self.exit_price - self.entry_price) * self.qty
+        if self.side == "short":
+            return (self.entry_price - self.exit_price) * self.qty
+        return 0.0
 
     def fee_usdt(self) -> float:
         return (self.entry_price * self.qty * self.entry_fee_rate) + (

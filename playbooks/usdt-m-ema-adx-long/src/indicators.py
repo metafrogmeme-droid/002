@@ -250,6 +250,7 @@ class IndicatorBook:
         if len(self._volumes) == self.volume_avg_bars + 1:
             prior = list(self._volumes)[:-1]
             volume_avg = sum(prior) / len(prior)
+        prev_close = self._prev_close
         self._prev_high = high
         self._prev_low = low
         self._prev_close = close
@@ -269,6 +270,9 @@ class IndicatorBook:
             "volume": volume,
             "volume_avg_prev": volume_avg,
             "close": close,
+            "high": high,
+            "low": low,
+            "prev_close": prev_close,
         }
 
 
@@ -317,4 +321,36 @@ def batch_last(
         "volume": volumes[index],
         "volume_avg_prev": volume_avg,
         "close": closes[index],
+        "high": highs[index],
+        "low": lows[index],
+        "prev_close": closes[prev] if prev >= 0 else None,
     }
+
+
+class FourHourSlope:
+    """EMA(50) slope of 4H closes built from 1H closes. None until the seed exists."""
+
+    def __init__(self, period: int = 50) -> None:
+        self.period = period
+        self._hour = 0
+        self._ema: float | None = None
+        self._prev_ema: float | None = None
+        self._seed: list[float] = []
+        self.up: bool | None = None
+
+    def update(self, close: float) -> bool | None:
+        self._hour += 1
+        if self._hour % 4 != 0:
+            return self.up
+        if self._ema is None:
+            self._seed.append(close)
+            if len(self._seed) == self.period:
+                self._ema = sum(self._seed) / self.period
+            return None
+        self._prev_ema = self._ema
+        alpha = 2.0 / (self.period + 1)
+        self._ema = alpha * close + (1.0 - alpha) * self._ema
+        if self._prev_ema is None:
+            return None
+        self.up = self._ema > self._prev_ema
+        return self.up

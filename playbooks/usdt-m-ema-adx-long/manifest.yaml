@@ -78,6 +78,11 @@ strategy_config:
   backtest_end: "2026-10-09T00:00:00Z"
   fee_tier_status: "PENDING"
   version_label: "v2"
+  entry_style: cross
+  exit_style: fixed_2r
+  htf_filter: false
+  research_side: long
+  window_label: full
   price_tick:
     BTCUSDT: "0.1"
     ETHUSDT: "0.01"

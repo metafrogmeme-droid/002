@@ -61,6 +61,21 @@ def _as_bool(cfg: Mapping[str, Any], key: str) -> bool:
     raise ConfigError(f"strategy_config.{key} must be a boolean")
 
 
+def _optional_bool(cfg: Mapping[str, Any], key: str, default: bool) -> bool:
+    if key not in cfg or cfg[key] is None:
+        return default
+    return _as_bool(cfg, key)
+
+
+def _choice(cfg: Mapping[str, Any], key: str, default: str, allowed: set[str]) -> str:
+    if key not in cfg or cfg[key] is None or cfg[key] == "":
+        return default
+    value = str(cfg[key])
+    if value not in allowed:
+        raise ConfigError(f"strategy_config.{key} must be one of {sorted(allowed)}")
+    return value
+
+
 def _as_tuple(cfg: Mapping[str, Any], key: str) -> tuple[str, ...]:
     raw = _require(cfg, key)
     if not isinstance(raw, (list, tuple)) or not raw:
@@ -114,6 +129,11 @@ class Config:
     backtest_end: str
     fee_tier_status: str
     version_label: str
+    entry_style: str
+    exit_style: str
+    htf_filter: bool
+    research_side: str
+    window_label: str
     price_tick: dict[str, float]
     size_step: dict[str, float]
     min_qty: dict[str, float]
@@ -190,6 +210,11 @@ def load_config(strategy_config: Mapping[str, Any] | None) -> Config:
         backtest_end=str(_require(cfg, "backtest_end")),
         fee_tier_status=str(_require(cfg, "fee_tier_status")),
         version_label=str(_require(cfg, "version_label")),
+        entry_style=_choice(cfg, "entry_style", "cross", {"cross", "pullback", "mean_reversion"}),
+        exit_style=_choice(cfg, "exit_style", "fixed_2r", {"fixed_2r", "partial_trail"}),
+        htf_filter=_optional_bool(cfg, "htf_filter", False),
+        research_side=_choice(cfg, "research_side", "long", {"long", "short"}),
+        window_label=_choice(cfg, "window_label", "full", {"full", "train"}),
         price_tick=_as_symbol_floats(cfg, "price_tick", symbols),
         size_step=_as_symbol_floats(cfg, "size_step", symbols),
         min_qty=_as_symbol_floats(cfg, "min_qty", symbols),

@@ -20,7 +20,7 @@ from nautilus_trader.trading.strategy import Strategy
 
 try:
     from .action_log import action_row
-    from .indicators import IndicatorBook
+    from .indicators import FourHourSlope, IndicatorBook
     from .logic import AccountState, Snapshot, decide
     from .params import Config, ConfigError, load_config
     from .reasons import (
@@ -41,11 +41,12 @@ try:
         ClosedTrade,
         exposure_hits_blackout,
         is_funding_settlement,
+        quantize_floor,
         quantize_nearest,
     )
 except ImportError:
     from action_log import action_row
-    from indicators import IndicatorBook
+    from indicators import FourHourSlope, IndicatorBook
     from logic import AccountState, Snapshot, decide
     from params import Config, ConfigError, load_config
     from reasons import (
@@ -66,6 +67,7 @@ except ImportError:
         ClosedTrade,
         exposure_hits_blackout,
         is_funding_settlement,
+        quantize_floor,
         quantize_nearest,
     )
 
@@ -85,6 +87,7 @@ class EmaAdxLongStrategy(Strategy):
         self.playbook: Config | None = None
         self._config_error = ""
         self._books: dict[str, IndicatorBook] = {}
+        self._htf: dict[str, FourHourSlope] = {}
         self._instruments: dict[str, Any] = {}
         self._pending: dict[str, dict[str, Any]] = {}
         self._open: dict[str, dict[str, Any]] = {}
@@ -187,16 +190,16 @@ class EmaAdxLongStrategy(Strategy):
                 volume_avg_bars=self.playbook.volume_avg_bars,
             ),
         )
-        values = book.update(
-            _num(bar.high),
-            _num(bar.low),
-            _num(bar.close),
-            _num(bar.volume),
-        )
+        high = _num(bar.high)
+        low = _num(bar.low)
+        close = _num(bar.close)
+        values = book.update(high, low, close, _num(bar.volume))
+        htf = self._htf.setdefault(symbol, FourHourSlope())
+        values["htf_up"] = htf.update(close)
         open_ts = datetime.fromtimestamp(bar.ts_event / 1_000_000_000, tz=timezone.utc)
         close_ts = open_ts + timedelta(hours=self.playbook.bar_hours)
         self._charge_funding(symbol, open_ts, instrument)
-        self._manage_symbol(symbol, instrument, close_ts)
+        self._manage_symbol(symbol, instrument, close_ts, high, low, close, values.get("atr"))
         self._maybe_enter(symbol, instrument, close_ts, values)
 
     def on_order_filled(self, event: Any) -> None:
@@ -207,7 +210,9 @@ class EmaAdxLongStrategy(Strategy):
         fee = _money(getattr(event, "commission", None))
         fill_ts = datetime.fromtimestamp(event.ts_event / 1_000_000_000, tz=timezone.utc)
         is_buy = side.endswith("BUY") or side == "1"
-        if symbol in self._pending and is_buy and symbol not in self._open:
+        pending = self._pending.get(symbol)
+        entry_is_buy = pending is None or pending.get("side", "long") == "long"
+        if pending is not None and (is_buy == entry_is_buy) and symbol not in self._open:
             pending = self._pending.pop(symbol)
             same_bar = fill_ts <= pending["submit_ts"] + timedelta(hours=1)
             self._open[symbol] = {
@@ -226,6 +231,11 @@ class EmaAdxLongStrategy(Strategy):
                 "funding_usdt": 0.0,
                 "funding_known": True,
                 "submit_ts": pending["submit_ts"],
+                "side": pending.get("side", "long"),
+                "exit_style": pending.get("exit_style", "fixed_2r"),
+                "atr": pending.get("atr"),
+                "scaled": False,
+                "trail": None,
             }
             if self.playbook and not same_bar:
                 self._open[symbol]["entry_fee_rate"] = self.playbook.maker_fee
@@ -243,7 +253,9 @@ class EmaAdxLongStrategy(Strategy):
             )
             return
         position = self._open.get(symbol)
-        if position is not None and not is_buy:
+        closing_sell = position is not None and position.get("side", "long") == "long" and not is_buy
+        closing_buy = position is not None and position.get("side") == "short" and is_buy
+        if closing_sell or closing_buy:
             position["exit_notional"] += price * qty
             position["exit_qty"] += qty
             position["exit_fee"] += fee or 0.0
@@ -274,7 +286,7 @@ class EmaAdxLongStrategy(Strategy):
             symbol=symbol,
             entry_ts=position["fill_ts"].isoformat(),
             exit_ts=datetime.fromtimestamp(event.ts_event / 1_000_000_000, tz=timezone.utc).isoformat(),
-            side="long",
+            side=str(position.get("side") or "long"),
             qty=float(exit_qty),
             entry_price=float(entry_price),
             exit_price=float(exit_price),
@@ -377,6 +389,10 @@ class EmaAdxLongStrategy(Strategy):
             price_tick=_num(instrument.price_increment),
             size_step=_num(instrument.size_increment),
             min_qty=_num(getattr(instrument, "lot_size", None) or instrument.size_increment),
+            high=_optional_float(values.get("high")),
+            low=_optional_float(values.get("low")),
+            prev_close=_optional_float(values.get("prev_close")),
+            htf_up=values.get("htf_up") if isinstance(values.get("htf_up"), bool) else None,
         )
         account = AccountState(
             open_positions=len(self._open) + len(self._pending),
@@ -391,7 +407,7 @@ class EmaAdxLongStrategy(Strategy):
         decision = decide(snapshot, cfg, account)
         if decision.reason_code in {"FILTER_NO_CROSS", "INSUFFICIENT_HISTORY"}:
             return
-        if decision.action != "long":
+        if decision.action not in {"long", "short"}:
             self._append(
                 action_row(
                     timestamp=close_ts,
@@ -413,7 +429,7 @@ class EmaAdxLongStrategy(Strategy):
                 )
             )
             return
-        self._submit_bracket(symbol, instrument, close_ts, decision)
+        self._submit_bracket(symbol, instrument, close_ts, decision, values.get("atr"))
 
     def _submit_bracket(
         self,
@@ -421,6 +437,7 @@ class EmaAdxLongStrategy(Strategy):
         instrument: Any,
         close_ts: datetime,
         decision: Any,
+        atr: float | None,
     ) -> None:
         cfg = self.playbook
         if cfg is None or decision.qty is None or decision.entry is None:
@@ -430,17 +447,21 @@ class EmaAdxLongStrategy(Strategy):
             stop = Price.from_str(_price_text(decision.stop, instrument))
             target = Price.from_str(_price_text(decision.take_profit, instrument))
             qty = Quantity(Decimal(str(decision.qty)), instrument.size_precision)
-            order_list = self.order_factory.bracket(
-                instrument_id=instrument.id,
-                order_side=OrderSide.BUY,
-                quantity=qty,
-                time_in_force=TimeInForce.GTC,
-                entry_price=entry,
-                sl_trigger_price=stop,
-                tp_price=target,
-                entry_order_type=OrderType.LIMIT,
-            )
-            self.submit_order_list(order_list)
+            order_side = OrderSide.SELL if decision.side == "short" else OrderSide.BUY
+            if cfg.exit_style == "partial_trail" and decision.side == "long":
+                self._submit_partial(instrument, decision, entry, stop)
+            else:
+                order_list = self.order_factory.bracket(
+                    instrument_id=instrument.id,
+                    order_side=order_side,
+                    quantity=qty,
+                    time_in_force=TimeInForce.GTC,
+                    entry_price=entry,
+                    sl_trigger_price=stop,
+                    tp_price=target,
+                    entry_order_type=OrderType.LIMIT,
+                )
+                self.submit_order_list(order_list)
         except Exception as exc:
             self._append(
                 action_row(
@@ -462,6 +483,9 @@ class EmaAdxLongStrategy(Strategy):
             "risk_usdt": decision.risk_usdt,
             "margin": decision.margin or 0.0,
             "tick": _num(instrument.price_increment),
+            "side": decision.side,
+            "exit_style": cfg.exit_style,
+            "atr": atr,
         }
         self._append(
             action_row(
@@ -473,7 +497,41 @@ class EmaAdxLongStrategy(Strategy):
             )
         )
 
-    def _manage_symbol(self, symbol: str, instrument: Any, close_ts: datetime) -> None:
+    def _submit_partial(self, instrument: Any, decision: Any, entry: Price, stop: Price) -> None:
+        """Half the size targets 1.5R. The rest keeps a 6R cap and is trailed at 1 ATR."""
+        step = _num(instrument.size_increment)
+        total = Decimal(str(decision.qty))
+        half = quantize_floor(float(total) / 2.0, step)
+        rest = quantize_floor(float(total - half), step)
+        if half <= 0 or rest <= 0:
+            raise ValueError("qty cannot split")
+        tick = _num(instrument.price_increment)
+        distance = Decimal(str(decision.entry)) - Decimal(str(decision.stop))
+        first_tp = quantize_nearest(float(Decimal(str(decision.entry)) + distance * Decimal("1.5")), tick)
+        cap = quantize_nearest(float(Decimal(str(decision.entry)) + distance * Decimal("6")), tick)
+        for part, target in ((half, first_tp), (rest, cap)):
+            order_list = self.order_factory.bracket(
+                instrument_id=instrument.id,
+                order_side=OrderSide.BUY,
+                quantity=Quantity(part, instrument.size_precision),
+                time_in_force=TimeInForce.GTC,
+                entry_price=entry,
+                sl_trigger_price=stop,
+                tp_price=Price.from_str(_price_text(float(target), instrument)),
+                entry_order_type=OrderType.LIMIT,
+            )
+            self.submit_order_list(order_list)
+
+    def _manage_symbol(
+        self,
+        symbol: str,
+        instrument: Any,
+        close_ts: datetime,
+        high: float,
+        low: float,
+        close: float,
+        atr: float | None,
+    ) -> None:
         cfg = self.playbook
         if cfg is None:
             return
@@ -498,6 +556,38 @@ class EmaAdxLongStrategy(Strategy):
                 position["exit_intent"] = EXIT_TIME
                 self.cancel_all_orders(instrument.id)
                 self.close_all_positions(instrument.id)
+                return
+            self._trail_partial(symbol, instrument, position, high, low, atr)
+
+    def _trail_partial(
+        self,
+        symbol: str,
+        instrument: Any,
+        position: dict[str, Any],
+        high: float,
+        low: float,
+        atr: float | None,
+    ) -> None:
+        if position.get("exit_style") != "partial_trail" or position.get("side", "long") != "long":
+            return
+        width = position.get("atr") or atr
+        qty = position.get("qty") or 0.0
+        if not width or qty <= 0:
+            return
+        entry = position["entry_notional"] / qty
+        distance = float(position["risk_usdt"]) / qty
+        if distance <= 0:
+            return
+        if not position.get("scaled") and high >= entry + 1.5 * distance:
+            position["scaled"] = True
+            position["trail"] = high - float(width)
+        if not position.get("scaled"):
+            return
+        position["trail"] = max(float(position.get("trail") or 0.0), high - float(width))
+        if low <= float(position["trail"]):
+            position["exit_intent"] = EXIT_STOP
+            self.cancel_all_orders(instrument.id)
+            self.close_all_positions(instrument.id)
 
     def _charge_funding(self, symbol: str, open_ts: datetime, instrument: Any) -> None:
         position = self._open.get(symbol)
@@ -520,7 +610,8 @@ class EmaAdxLongStrategy(Strategy):
             )
             return
         entry = position["entry_notional"] / position["qty"]
-        charge = position["qty"] * entry * rate
+        sign = -1.0 if position.get("side") == "short" else 1.0
+        charge = sign * position["qty"] * entry * rate
         position["funding_usdt"] += charge
         self._append(
             action_row(
@@ -590,6 +681,12 @@ class EmaAdxLongStrategy(Strategy):
         if position.get("exit_intent") == EXIT_TIME:
             return EXIT_TIME
         tick = float(position["tick"])
+        if position.get("side") == "short":
+            if exit_price >= float(position["stop"]) - tick:
+                return EXIT_STOP
+            if exit_price <= float(position["take_profit"]) + tick:
+                return EXIT_TP
+            return EXIT_UNCLASSIFIED
         if exit_price <= float(position["stop"]) + tick:
             return EXIT_STOP
         if exit_price >= float(position["take_profit"]) - tick:
@@ -642,6 +739,18 @@ class EmaAdxLongStrategy(Strategy):
 def _symbol(value: Any) -> str:
     text = str(value)
     return text.split(".", 1)[0]
+
+
+def _optional_float(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number or number in (float("inf"), float("-inf")):
+        return None
+    return number
 
 
 def _num(value: Any) -> float:

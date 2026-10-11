@@ -3,7 +3,9 @@
 import math
 import sys
 import unittest
-from datetime import datetime, timezone
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 
 import yaml
@@ -11,10 +13,17 @@ import yaml
 PACKAGE = Path("/workspace/playbooks/usdt-m-ema-adx-long")
 sys.path.insert(0, str(PACKAGE / "src"))
 
-from indicators import IndicatorBook, batch_last  # noqa: E402
+from indicators import FourHourSlope, IndicatorBook, batch_last  # noqa: E402
+from live_book import (  # noqa: E402
+    bars_are_stale,
+    book_realised,
+    choose_order_qty,
+    net_from_fill_rows,
+    time_stop_due,
+)
 from logic import AccountState, Snapshot, decide  # noqa: E402
 from params import ConfigError, load_config  # noqa: E402
-from report import activation_verdict  # noqa: E402
+from report import activation_verdict, fill_identity  # noqa: E402
 from risk import (  # noqa: E402
     ClosedTrade,
     align_ohlc_to_tick,
@@ -26,6 +35,7 @@ from risk import (  # noqa: E402
     funding_series_gap_ms,
     in_funding_blackout,
     plan_long_size,
+    plan_short_size,
 )
 
 
@@ -273,6 +283,116 @@ class RiskTests(unittest.TestCase):
         quiet_end = datetime(2026, 10, 9, 2, 0, tzinfo=timezone.utc)
         self.assertTrue(exposure_hits_blackout(start, end, 15))
         self.assertFalse(exposure_hits_blackout(quiet_start, quiet_end, 15))
+
+
+class LiveBookTests(unittest.TestCase):
+    def test_realised_loss_counters_persist_in_state(self):
+        state = {"daily": {}, "cumulative_realised": 0.0, "consecutive_losses": 0}
+        book_realised(state, -15.0, "2026-10-11")
+        book_realised(state, -15.0, "2026-10-11")
+        self.assertEqual(state["daily"]["2026-10-11"], -30.0)
+        self.assertEqual(state["cumulative_realised"], -30.0)
+        self.assertEqual(state["consecutive_losses"], 2)
+        book_realised(state, 4.0, "2026-10-12")
+        self.assertEqual(state["consecutive_losses"], 0)
+
+    def test_time_stop_uses_fill_time(self):
+        filled = datetime(2026, 10, 11, 1, 0, tzinfo=timezone.utc)
+        self.assertFalse(time_stop_due(filled.isoformat(), filled + timedelta(hours=7, minutes=59), 8))
+        self.assertTrue(time_stop_due(filled.isoformat(), filled + timedelta(hours=8), 8))
+        self.assertFalse(time_stop_due(None, filled + timedelta(hours=9), 8))
+
+    def test_order_qty_cannot_increase_the_plan(self):
+        planned = Decimal("0.10")
+        self.assertEqual(
+            choose_order_qty(planned, Decimal("0.20"), Decimal("10"), Decimal("15")),
+            planned,
+        )
+        self.assertIsNone(choose_order_qty(planned, planned, Decimal("200"), Decimal("15")))
+
+    def test_stale_bar_and_unknown_fill_profit(self):
+        now = datetime(2026, 10, 11, 3, 0, tzinfo=timezone.utc)
+        fresh = int(datetime(2026, 10, 11, 1, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        old = int(datetime(2026, 10, 10, 1, 0, tzinfo=timezone.utc).timestamp() * 1000)
+        self.assertFalse(bars_are_stale(fresh, now, 1))
+        self.assertTrue(bars_are_stale(old, now, 1))
+        self.assertTrue(bars_are_stale(None, now, 1))
+        self.assertIsNone(net_from_fill_rows([{"price": "1"}]))
+        self.assertEqual(net_from_fill_rows([{"profit": "-4.5"}]), -4.5)
+
+    def test_fill_identity_matches_entry_plus_exit(self):
+        agreed = fill_identity(17, 34, 17)
+        self.assertTrue(agreed["agrees"])
+        self.assertEqual(agreed["expected_fills"], 34)
+        self.assertFalse(fill_identity(17, 0, 0)["agrees"])
+
+
+class VariantTests(unittest.TestCase):
+    def test_v2_defaults_stay_on_the_cross(self):
+        cfg = _config()
+        self.assertEqual(cfg.entry_style, "cross")
+        self.assertEqual(cfg.exit_style, "fixed_2r")
+        self.assertFalse(cfg.htf_filter)
+        self.assertEqual(cfg.research_side, "long")
+        decision = decide(_snapshot(prev_fast_ema=101.0, fast_ema=102.0), cfg, _account())
+        self.assertEqual(decision.reason_code, "FILTER_NO_CROSS")
+
+    def test_pullback_is_the_only_change_from_a_cross(self):
+        cfg = replace(_config(), entry_style="pullback")
+        decision = decide(
+            _snapshot(
+                prev_fast_ema=101.0,
+                fast_ema=100.5,
+                slow_ema=99.0,
+                prev_slow_ema=99.0,
+                high=101.0,
+                low=100.0,
+                prev_close=101.2,
+            ),
+            cfg,
+            _account(),
+        )
+        self.assertEqual(decision.action, "long")
+
+    def test_mean_reversion_requires_adx_below_20(self):
+        cfg = replace(_config(), entry_style="mean_reversion")
+        stretched = _snapshot(adx=10.0, close=90.0, fast_ema=100.0, atr=5.0, prev_fast_ema=100.0, slow_ema=101.0)
+        self.assertEqual(decide(stretched, cfg, _account()).action, "long")
+        trending = _snapshot(adx=25.0, close=90.0, fast_ema=100.0, atr=5.0)
+        self.assertEqual(decide(trending, cfg, _account()).reason_code, "FILTER_REGIME_ADX")
+
+    def test_short_mirror_and_liquidation_skip(self):
+        cfg = replace(_config(), research_side="short")
+        decision = decide(
+            _snapshot(prev_fast_ema=101.0, prev_slow_ema=100.0, fast_ema=99.0, slow_ema=100.0, plus_di=10.0, minus_di=30.0),
+            cfg,
+            _account(),
+        )
+        self.assertEqual(decision.action, "short")
+        self.assertLessEqual(decision.risk_usdt, 15.0)
+        skipped = plan_short_size(
+            close=100.0,
+            atr=10.0,
+            atr_stop_mult=1.5,
+            reward_r=2.0,
+            fixed_loss_usdt=15.0,
+            price_tick=0.1,
+            size_step=0.0001,
+            min_qty=0.0001,
+            min_notional_usdt=5.0,
+            leverage=10,
+            margin_remaining=3000.0,
+        )
+        self.assertEqual(skipped.reason, "SKIP_LIQUIDATION_INSIDE_STOP")
+
+    def test_four_hour_slope_stays_unknown_until_seeded(self):
+        slope = FourHourSlope(period=2)
+        for close in (1, 1, 1, 2, 2, 2, 2, 3):
+            self.assertIsNone(slope.update(close))
+        self.assertIsNone(slope.update(3))
+        self.assertIsNone(slope.update(3))
+        self.assertIsNone(slope.update(3))
+        self.assertIs(slope.update(4), True)
 
 
 class VerdictTests(unittest.TestCase):
