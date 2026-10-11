@@ -257,10 +257,10 @@ class RiskTests(unittest.TestCase):
         self.assertIsNone(align_ohlc_to_tick(100.0, 101.0, 100.1, 100.5, 0.01))
         self.assertEqual(align_ohlc_to_tick(100.0, 101.0, 99.0, 100.5, 0.01), (100.0, 101.0, 99.0, 100.5))
         self.assertIsNone(align_ohlc_to_tick(100.004, 100.02, 100.006, 100.01, 0.01))
-        # A valid print that still satisfies the 0.01 grid is not rewritten.
+        # Off-tick prints are moved onto the instrument increment.
         self.assertEqual(
             align_ohlc_to_tick(100.006, 100.02, 100.004, 100.01, 0.01),
-            (100.006, 100.02, 100.004, 100.01),
+            (100.01, 100.02, 100.0, 100.01),
         )
 
     def test_funding_gap_is_reported_and_not_filled(self):

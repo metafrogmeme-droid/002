@@ -45,12 +45,13 @@ def ohlc_is_valid(open_: float, high: float, low: float, close: float) -> bool:
 def align_ohlc_to_tick(
     open_: float, high: float, low: float, close: float, tick: float
 ) -> tuple[float, float, float, float] | None:
-    """Return a bar the replay engine can accept, or None when it is not a price.
+    """Return a bar on the exchange increment, or None when it is not a price.
 
-    Prints that stay inside low <= open/close <= high after the exchange
-    increment are returned unchanged. A bar that breaks that rule only once
-    prices sit on the increment is pulled back onto that same grid. Nothing
-    is interpolated and no strategy threshold changes.
+    Every price is moved to the nearest tick. If that would put low above
+    open or close, low and high are pulled back onto the same grid. Off-tick
+    prints are not passed through: the engine rejects a fill whose precision
+    is finer than the instrument. Nothing is interpolated and no strategy
+    threshold changes.
     """
     if not ohlc_is_valid(open_, high, low, close) or tick <= 0:
         return None
@@ -58,13 +59,12 @@ def align_ohlc_to_tick(
     h = quantize_nearest(high, tick)
     l = quantize_nearest(low, tick)
     c = quantize_nearest(close, tick)
-    if l <= o and l <= c and h >= o and h >= c and l <= h:
-        return (open_, high, low, close)
-    low_q = min(o, c)
-    high_q = max(o, c, h)
-    if low_q <= 0 or high_q < low_q:
+    if not (l <= o and l <= c and h >= o and h >= c and l <= h):
+        l = min(o, c)
+        h = max(o, c, h)
+    if l <= 0 or h < l:
         return None
-    return (float(o), float(high_q), float(low_q), float(c))
+    return (float(o), float(h), float(l), float(c))
 
 
 def funding_series_gap_ms(stamps: Sequence[int], max_gap_ms: int) -> int | None:
