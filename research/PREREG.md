@@ -33,3 +33,11 @@ Gates are unchanged: full period ≥ 30 trades, 1x > 0, 2x ≥ 0, and a test-win
 | F4 | Keep the 1H v2.1 cross and require the EMA50 slope of 4H closes, built from those 1H closes, to be up. Re-measured because bar construction changed after `pbrun-7f9e501109e6`. | Stays near that run's 10 trades. | Slightly above the 1x figure. | Stays slightly positive, near +0.02826434385871241 R. The later v2.1 cross replay did not move the 17-trade sample, so this filter's sign is predicted to hold. | Stays near −0.07 to −0.081. 2x stays negative, as in −0.04597315507182499 R on that earlier train run. |
 
 None of these four is predicted to pass the full-period gates. T4 is the one predicted to cut the cost drag. F4 is the one predicted to show a positive train 1x, on a sample too small to trust and with 2x still negative.
+
+### Combination, written after the single-change train runs and before the combination run
+
+A train 1x was −0.08986471969338064 R on 31 trades, which is above the v2.1 train baseline of −0.18129553073061996 R. F4 train 1x was +0.02826434385871241 R on 10 trades, also above that baseline. MX train 1x was −0.18129553073061996 R, the same number as the baseline, so it did not improve. T4 produced 0 trades and no expectancy, so it did not improve. The only allowed combination is A with F4.
+
+| id | pieces | predicted trades | predicted 0x R | predicted 1x R | predicted cost drag |
+| --- | --- | --- | --- | --- | --- |
+| AF | Pullback entry and the 4H EMA50 slope filter together. Nothing else changes. The stop stays 1.5×ATR on 1H, so this is not a cost-drag change. | Between F4's 10 and A's 31. The filter removes some pullbacks. | Above A's −0.009746742276551978 R and below F4's +0.10250184278924986 R. | Better than A's −0.08986471969338064 R. Not predicted to be a clear pass, and not predicted to beat F4's +0.02826434385871241 R by a wide margin. | Near −0.075 to −0.080, the same 1H stop drag as the two pieces. |
