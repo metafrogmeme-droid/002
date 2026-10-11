@@ -22,3 +22,31 @@ Chosen full-period run is D, `pbrun-acf972cf66e8`:
 Gate: full trades 12 < 30. Fail. Not published.
 
 Short mirror `pbrun-e1eaa27d0f6a` full period: 9 trades, 1x 0.13670191223353906 R, 0x 0.23373782752335448 R, 2x 0.039665996943723726 R, PF 1.4899302917856638. Fills 18, positions 9. Trades 9 < 30. Shorts stay off.
+
+## Round 2
+
+Pre-registered in `687ca8575a225f40b85b3802e5b8b27028752c8c` before any run. The combination was pre-registered in `d1948b2` after the single-change train runs and before the combination run. v2.1 train baseline stays 14 trades, 1x −0.18129553073061996 R. Cost drag is author 1x minus author 0x. Upload HTTP 200 and run HTTP 200 for every row. The saved poll body code is 200. None of these runs was confirmed or published.
+
+| id | one change | run | trades | 0x R | 1x R | 2x R | cost drag | PF |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A pullback | EMA20 tag inside an established uptrend, instead of a fresh cross | pbrun-fb88aa84852e | 31 | −0.009746742276551978 | −0.08986471969338064 | −0.16998269711020933 | −0.08011797741682866 | 0.8004631533582727 |
+| T4 | 4H signal, ADX, ATR, stop, and volume; time stop 32 hours (8 bars) | pbrun-5a6190d2af9b | 0 | undefined | undefined | undefined | undefined | undefined |
+| MX | 2R target is a post-only reduce-only limit; stop stays a taker stop-market | pbrun-fec6fb63ac8b | 14 | −0.10409235701641426 | −0.18129553073061996 | −0.2584987044448256 | −0.07720317371420571 | 0.6908843492682346 |
+| F4 | 4H EMA50 slope must be up on the 1H v2.1 cross | pbrun-b43227c8f807 | 10 | 0.10250184278924986 | 0.02826434385871241 | −0.04597315507182499 | −0.07423749893053744 | 1.053183037533984 |
+
+T4 completed with 0 engine orders, 0 fills, and 0 positions. `coverage_ok` is false because the last 4H bar is 2026-04-08T20:00:00Z, more than two hours before the train end, while 3282 4H bars and 547 funding rows are present. The zero trade count is the engine result. Expectancy is undefined, so T4 did not improve train 1x.
+
+MX `exit_model` is `{"maker_tp":"post_only"}`. Liquidity on that replay: 14 LIMIT BUY TAKER entries, 6 MARKET SELL TAKER, 7 STOP_MARKET SELL TAKER, 1 LIMIT SELL MAKER. The engine charged maker on that one resting target fill. Author 1x equals the v2.1 train baseline, so MX did not improve.
+
+A and F4 each improved train 1x versus −0.18129553073061996 R. The only allowed combination is AF.
+
+AF, `pbrun-9d367631f81e`, train: 27 trades, 0x −0.03854527820408705 R, 1x −0.11879618128266156 R, 2x −0.1990470843612361 R, cost drag −0.08025090307857452 R, PF 0.7284855730811243. Fills 54, positions 27, identity agrees. Its 1x is worse than A alone.
+
+Chosen full-period run is A, because 31 is the unique maximum train trade count and the selection rule is the best train 1x among the candidates with the most trades. One full-period replay, `pbrun-03b498910da3`:
+
+- full: 31 trades, 0x −0.009746742276551978 R, 1x −0.08986471969338064 R, 2x −0.16998269711020933 R, PF 0.8004631533582727, win rate 0.4838709677419355, max drawdown 4.38929305262008% of 3000, net −41.383291255759005 USDT, Sharpe −0.5611, coverage_ok true
+- train block inside that run: 31 trades, 1x −0.08986471969338064 R, status OK
+- test block: 0 trades, expectancy undefined, status NO_TRADES
+- engine account 100000.00000000 → 99959.62437622 across 204 points and 63 unique totals; fills 62, positions 31, identity agrees
+
+Gates: trades 31 ≥ 30 pass; 1x > 0 fail; 2x ≥ 0 fail; test expectancy positive and the same sign as train fail. Not published. Published version stays server 0.0.3.
