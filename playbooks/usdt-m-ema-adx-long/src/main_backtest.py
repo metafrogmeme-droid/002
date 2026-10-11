@@ -121,6 +121,16 @@ def _finish(cfg: Any, result: Any, coverage: list[dict[str, Any]], start_ms: int
             "train window if the edge is stable. A sign flip falsifies stability. "
             "This prediction does not claim either sign is positive."
         ),
+        "leverage_prediction": (
+            "10x does not change R expectancy; it only changes whether the stop "
+            "sits outside liquidation. Trade count and net expectancy in R are "
+            "predicted to stay the same as the 5x replay (17 trades, 1x expectancy "
+            "-0.07888825482119473 R, 2x expectancy -0.1600857319901629 R). Any "
+            "difference is a liquidation skip, not a better signal. A higher cap "
+            "can also release an order that 5x skipped for margin; that is still "
+            "not a better signal."
+        ),
+        "liquidation_skips": _liquidation_skips(),
     }
     reports = raw.get("reports")
     if isinstance(reports, dict):
@@ -156,6 +166,9 @@ def _finish(cfg: Any, result: Any, coverage: list[dict[str, Any]], start_ms: int
                 "coverage_ok": coverage_ok,
                 "fee_tier_status": cfg.fee_tier_status,
                 "live_trades": 0,
+                "version_label": cfg.version_label,
+                "leverage": cfg.applied_leverage,
+                "liquidation_skips": _liquidation_skips(),
                 "coverage": [
                     {
                         "symbol": item.get("symbol"),
@@ -220,6 +233,26 @@ def _pending_coverage(summary: dict[str, Any]) -> dict[str, Any]:
         "pending_reason": "kline or funding coverage does not span the declared 2y window",
         "provisional_status": summary.get("status"),
     }
+
+
+def _liquidation_skips() -> dict[str, Any]:
+    """Count logged skips. Missing log stays PENDING; a present log can be zero."""
+    path = OUTPUT / "action_log.jsonl"
+    counts = {"BTCUSDT": 0, "ETHUSDT": 0, "SOLUSDT": 0}
+    if not path.exists():
+        return {"status": "PENDING", "counts": counts}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict) or row.get("reason_code") != "SKIP_LIQUIDATION_INSIDE_STOP":
+            continue
+        symbol = str(row.get("symbol") or "")
+        counts[symbol] = counts.get(symbol, 0) + 1
+    return {"status": "OK", "counts": counts}
 
 
 def _load_trades() -> list[ClosedTrade]:

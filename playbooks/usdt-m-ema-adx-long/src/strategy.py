@@ -1,4 +1,4 @@
-"""Nautilus replay strategy for the v1 long-only EMA-ADX playbook.
+"""Nautilus replay strategy for the v2 long-only EMA-ADX playbook.
 
 Stops and targets are submitted with the entry as a bracket. If that attached
 order cannot be created, the strategy does not open a naked position.
@@ -398,6 +398,7 @@ class EmaAdxLongStrategy(Strategy):
                     symbol=symbol,
                     side="none",
                     reason_code=decision.reason_code,
+                    detail=decision.detail,
                 )
             )
             return

@@ -131,6 +131,7 @@ class SizePlan:
     notional: Decimal
     margin: Decimal
     reason: str
+    detail: str = ""
 
 
 def plan_long_size(
@@ -158,6 +159,19 @@ def plan_long_size(
     distance = entry - stop
     if distance <= 0 or entry <= 0:
         return _reject("INVALID_SIGNAL")
+    # Optimistic isolated long liquidation ignores maintenance: adverse move of 1/leverage.
+    # The public contract payload has no keepMarginRate, so that rate is not invented.
+    # Real liquidation is closer to entry when maintenance is positive, so equality skips too.
+    liquidation_fraction = Decimal(1) / Decimal(leverage)
+    stop_fraction = distance / entry
+    if stop_fraction >= liquidation_fraction:
+        return _reject(
+            "SKIP_LIQUIDATION_INSIDE_STOP",
+            (
+                f"stop_fraction={stop_fraction} liquidation_fraction={liquidation_fraction} "
+                f"leverage={leverage}; isolated liquidation is inside the 1.5 ATR stop"
+            ),
+        )
     risk_budget = _decimal(fixed_loss_usdt)
     raw_qty = risk_budget / distance
     qty = quantize_floor(float(raw_qty), size_step)
@@ -186,10 +200,11 @@ def plan_long_size(
         notional=notional,
         margin=margin,
         reason="TRIGGER_LONG",
+        detail="",
     )
 
 
-def _reject(reason: str) -> SizePlan:
+def _reject(reason: str, detail: str = "") -> SizePlan:
     zero = Decimal("0")
     return SizePlan(
         qty=zero,
@@ -201,6 +216,7 @@ def _reject(reason: str) -> SizePlan:
         notional=zero,
         margin=zero,
         reason=reason,
+        detail=detail,
     )
 
 

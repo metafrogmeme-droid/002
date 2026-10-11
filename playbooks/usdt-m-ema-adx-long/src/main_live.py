@@ -136,6 +136,7 @@ def _plans(
                 symbol=symbol,
                 side="none",
                 reason_code=decision.reason_code,
+                detail=decision.detail,
             )
         )
     return plans, hold_reason
@@ -293,7 +294,11 @@ def _execute_entry(cfg: Config, state: dict[str, Any], symbol: str, decision: An
         product_type="USDT-FUTURES",
     )
     qty = Decimal(str(qty_plan.qty))
-    stop_distance = Decimal(str(decision.entry)) - Decimal(str(decision.stop))
+    entry_price = Decimal(str(decision.entry))
+    stop_distance = entry_price - Decimal(str(decision.stop))
+    if entry_price > 0 and stop_distance / entry_price >= Decimal(1) / Decimal(leverage):
+        _log_reject(symbol, "SKIP_LIQUIDATION_INSIDE_STOP isolated liquidation is inside the stop")
+        return {"status": "rejected"}
     if stop_distance <= 0 or qty * stop_distance > Decimal(str(cfg.fixed_loss_usdt)) + Decimal("0.01"):
         _log_reject(symbol, "computed qty would risk more than the fixed loss")
         return {"status": "rejected"}

@@ -98,10 +98,11 @@ class Decision:
     qty: float | None = None
     risk_usdt: float | None = None
     margin: float | None = None
+    detail: str | None = None
 
 
-def _hold(reason: str) -> Decision:
-    return Decision(action="hold", side="none", reason_code=reason)
+def _hold(reason: str, detail: str | None = None) -> Decision:
+    return Decision(action="hold", side="none", reason_code=reason, detail=detail or None)
 
 
 def decide(snapshot: Snapshot, cfg: Config, account: AccountState) -> Decision:
@@ -199,7 +200,7 @@ def decide(snapshot: Snapshot, cfg: Config, account: AccountState) -> Decision:
         margin_remaining=account.margin_remaining,
     )
     if plan.reason != TRIGGER_LONG:
-        return _hold(plan.reason)
+        return _hold(plan.reason, plan.detail or None)
     return Decision(
         action="long",
         side="long",

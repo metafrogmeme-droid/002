@@ -1,6 +1,6 @@
-# USDT-M EMA ADX Long (v1)
+# USDT-M EMA ADX Long (v2)
 
-Long-only trend Playbook for Bitget USDT-M perpetuals. Version label `v1` (manifest `1.0.0`). Frozen at activation. A later version may change one parameter, and only after a written prediction of its effect.
+Long-only trend Playbook for Bitget USDT-M perpetuals. Version label `v2`. v1 was the 5x package. v2 changes only the isolated-margin leverage hard cap, from 5x to 10x, and skips an order when that liquidation sits inside the stop. EMA, ADX, ATR percentile, volume, and the 2R target are unchanged.
 
 This package does not claim a win rate, profit factor, Sharpe ratio, drawdown, or expectancy. Those numbers stay PENDING until a sandbox replay returns them from data. Do not activate live trading from this README.
 
@@ -27,9 +27,10 @@ Sat out:
 - Within 15 minutes of 00:00, 08:00, or 16:00 UTC, or funding above 0.0003 against the long.
 - Any required input missing, stale, or not a finite number (`INVALID_SIGNAL` or `INSUFFICIENT_HISTORY`). No default direction.
 - Daily realised loss at or below −30 USDT, cumulative realised loss at or below −40 USDT, five consecutive losses, three open names, or a second position in the same symbol.
-- Margin, lot size, or minimum notional cannot fund the fixed 15 USDT stop without raising leverage past 5x.
+- Margin, lot size, or minimum notional cannot fund the fixed 15 USDT stop without raising leverage past 10x.
+- The 10x isolated liquidation price is inside the 1.5 × ATR(14) stop (`SKIP_LIQUIDATION_INSIDE_STOP`). Size is not raised to dodge that check.
 
-Universe: BTCUSDT, ETHUSDT, SOLUSDT only. Isolated margin. Leverage hard cap 5x.
+Universe: BTCUSDT, ETHUSDT, SOLUSDT only. Isolated margin. Leverage hard cap 10x. Scan schedule `5 * * * *` Etc/UTC, one pass each hour at minute 5.
 
 ## 开仓 / Entry
 
@@ -49,7 +50,7 @@ End-of-replay flats are tagged `BACKTEST_SHUTDOWN` and are excluded from expecta
 
 ## 风险 / Risk
 
-- Fixed loss at the stop: 15 USDT. Isolated margin. Leverage never raised above 5x to make a size fit.
+- Fixed loss at the stop: 15 USDT. Isolated margin. Leverage never raised above 10x to make a size fit. Quantity stays 15 USDT divided by the stop distance, floored to the size step.
 - Pause new entries at −30 USDT daily realised (UTC day, Playbook-attributed). Stop the Playbook at −40 USDT cumulative realised. Existing exchange stops stay; a halt does not flatten.
 - Halt after 5 consecutive losses.
 - Halt new risk when mark/ticker age is over 60 seconds, or when the newest closed bar is older than two intervals.
@@ -64,7 +65,7 @@ scan → filter → trigger → order → manage → exit → log
 1. Scan BTCUSDT, ETHUSDT, SOLUSDT 1H bars.
 2. Filter regime, funding clock, funding rate, halts, and data validity.
 3. Trigger only on a bullish EMA cross that passes every filter.
-4. Order a limit bracket with the stop and 2R target attached. Isolated, leverage at most 5x.
+4. Order a limit bracket with the stop and 2R target attached. Isolated, leverage at most 10x. Skip when isolated liquidation is inside the stop.
 5. Manage the 4h cancel, the funding-window cancel, and the one-position-per-symbol cap.
 6. Exit at stop, 2R, or 8h.
 7. Log the action row below.
@@ -83,7 +84,7 @@ scan → filter → trigger → order → manage → exit → log
 | entry | limit at signal close | no market fallback | user spec |
 | limit_timeout_hours | 4 | cancel if unfilled | user spec |
 | fixed_loss_usdt | 15 | size = 15 / stop distance, floored | user spec |
-| leverage cap | 5, isolated | hard cap; skip rather than raise leverage | user spec |
+| leverage cap | 10, isolated | hard cap; skip rather than raise leverage or size | user spec, v2 |
 | stop | 1.5 × ATR(14), attached | exchange-side, no post-fill gap | user spec |
 | take profit | fixed 2R | one attached target with the stop | chosen from the two allowed exits |
 | time_stop_hours | 8 | trend holding period | user spec |
@@ -102,25 +103,29 @@ scan → filter → trigger → order → manage → exit → log
 | walk_forward_split | 2026-04-09T00:00:00Z | train 18 months, test 6 months; parameters not fit on train | user spec |
 | forward PASS | PF ≥ 1.3 and Sharpe ≥ 0.5 after ≥ 30 live trades | fixed before any run | user spec |
 | forward FAIL | PF ≤ 1.1 after that sample | stop | user spec |
-| schedule | `5 * * * *` Etc/UTC | one hour after the bar open, so the prior hour has closed | default |
+| schedule | `5 * * * *` Etc/UTC | hourly at minute 5, after the prior 1H bar has closed | kept from v1 |
 | price_tick | BTC 0.1, ETH 0.01, SOL 0.001 | pricePlace and priceEndStep from public contracts | data |
 | size_step / min_qty | BTC 0.0001, ETH 0.01, SOL 0.1 | minTradeNum and sizeMultiplier | data |
 | min_notional_usdt | 5 | minTradeUSDT | data |
 | fee_tier_status | PENDING | Trade SDK has no fee-tier method; ACCESS-KEY is the GetAgent control-plane key | PENDING |
-| version_label | v1 | freeze at activation; no v2 in this package | user spec |
+| version_label | v2 | leverage cap only; signal parameters stay at the v1 values | user spec |
 
 ## Assumptions and what would falsify them
 
 - Assumption: a high-ADX, +DI-led tape continues more often than it snaps back, after costs. Falsifier: test-window net expectancy per trade flips sign versus the train window, or 2x-cost expectancy is not positive.
 - Assumption: ADX ≥ 25 and the 20–80 ATR percentile are reasonable gates, not fitted edges. Falsifier: the traded subset has negative net expectancy while the sat-out subset would have been positive. That result would reject v1; it would not authorize a silent retune.
 - Assumption: the public default fee schedule is what this account pays. Falsifier: the account tier differs. Until the tier is verified, activation stays off.
-- Assumption: 5x isolated liquidation (about a 20% adverse move before extra margin) is wider than the 1.5 × ATR stop, so the stop hits first. Falsifier: an isolated liquidation fills before the stop.
+- Assumption: an isolated long liquidates after an adverse move of 1/leverage of entry when maintenance is ignored. The public contract payload has no maintenance field, so none is invented. At 10x that optimistic distance is one tenth of entry. If the 1.5 × ATR stop is at least that far, the order is skipped and logged `SKIP_LIQUIDATION_INSIDE_STOP`. Liquidation is not allowed to replace the stop. Falsifier: a live isolated liquidation fills before the logged stop on an order this check allowed.
 - Assumption: −40 USDT is a cumulative Playbook stop, persisted, with no auto-resume. Falsifier: the operator intended a daily −40 USDT stop. v1 implements cumulative.
 - Assumption: one hourly live pass may submit only one new entry, because the platform follows the last actionable signal. Falsifier: the sandbox or live runner executes every emitted signal. The backtest can enter more than one symbol on the same bar; live can lag that.
 - Assumption: managed funding history covers the declared window. Falsifier: the funding series starts later than the kline window. Author net then stays PENDING. Missing funding is not filled with zero.
 - Assumption: a bracket order can carry the stop and target at submit. Falsifier: the sandbox rejects the bracket. The Playbook then logs `ORDER_REJECTED` and does not send a naked order.
 
 Walk-forward prediction, written before any replay: the test-window net expectancy per trade has the same sign as the train window if the edge is stable. A sign flip falsifies stability. This prediction does not claim either sign is positive.
+
+v2 leverage prediction, written before the 10x replay: 10x does not change R expectancy; it only changes whether the stop sits outside liquidation. Trade count and net expectancy in R are predicted to stay the same as the 5x replay (17 trades, 1x expectancy -0.07888825482119473 R, 2x expectancy -0.1600857319901629 R). Any difference is a liquidation skip, not a better signal. A higher cap can also release an order that 5x skipped for margin; that is still not a better signal.
+
+Next strategy step, not implemented in v2: keep EMA, ADX, the ATR percentile band, the volume multiple, and the 2R target frozen. The 5x sample is a reject (negative 2x expectancy, 17 trades, under 30). The next development is to leave that signal unchanged until one pre-declared change can be measured on its own. Prediction for that later step: retuning a gate on this sample will not establish an edge. The expected result of leaving the signal frozen is that another replay of the same signal still fails the same gates.
 
 ## Log schema
 
@@ -149,3 +154,5 @@ Bitget's own `crypto.futures.funding_rate` still does not cover 2024-10-09. Its 
 Sandbox run `pbrun-5b6eea8a28ee` replayed 17520 1H klines from 2024-10-09T00:00:00Z through 2026-10-08T23:00:00Z and 730 daily weighted funding rows from 2024-10-09T00:00:00Z through 2026-10-08T00:00:00Z for BTC, ETH, and SOL. The strategy log in that run's signal reports 17 closed trades, win rate 0.4117647058823529, average R and 1x net expectancy -0.07888825482119473 R, 0x expectancy 0.0023092223477735106 R, 2x expectancy -0.1600857319901629 R, profit factor 0.8514079646539923, max drawdown 2.403103333502609 percent of the 3000 USDT budget, and Sharpe -0.152. The same run's Nautilus report lists 0 orders and 0 fills, with account net pnl 0. The daily rate is joined as-of, so the 08:00 and 16:00 settlements reuse that day's 00:00 print. Seventeen trades is below 30. The 2x expectancy is negative. Walk-forward train and test figures were not returned. Do not activate.
 
 Activation still requires a verified fee tier and a later live sample of at least 30 trades with PF ≥ 1.3 and Sharpe ≥ 0.5. Live trades are 0.
+
+The v2 replay is a separate run. Until that run returns, its trade count, expectancy, and per-symbol liquidation skips stay PENDING in this file. Do not read the 17-trade v1 log as a v2 improvement.

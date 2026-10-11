@@ -170,6 +170,57 @@ class RiskTests(unittest.TestCase):
         self.assertGreater(float(plan.risk_usdt), 0.0)
         self.assertGreater(float(plan.take_profit), float(plan.entry))
 
+    def test_ten_x_keeps_the_fifteen_usdt_size(self):
+        plan = plan_long_size(
+            close=100.04,
+            atr=1.37,
+            atr_stop_mult=1.5,
+            reward_r=2.0,
+            fixed_loss_usdt=15.0,
+            price_tick=0.1,
+            size_step=0.0001,
+            min_qty=0.0001,
+            min_notional_usdt=5.0,
+            leverage=10,
+            margin_remaining=3000.0,
+        )
+        self.assertEqual(plan.reason, "TRIGGER_LONG")
+        self.assertLessEqual(float(plan.risk_usdt), 15.0)
+        self.assertLess(float(plan.stop_distance) / float(plan.entry), 0.1)
+
+    def test_ten_x_skips_when_liquidation_is_inside_the_stop(self):
+        wide = plan_long_size(
+            close=100.0,
+            atr=10.0,
+            atr_stop_mult=1.5,
+            reward_r=2.0,
+            fixed_loss_usdt=15.0,
+            price_tick=0.1,
+            size_step=0.0001,
+            min_qty=0.0001,
+            min_notional_usdt=5.0,
+            leverage=10,
+            margin_remaining=3000.0,
+        )
+        self.assertEqual(wide.reason, "SKIP_LIQUIDATION_INSIDE_STOP")
+        self.assertEqual(wide.qty, 0)
+        self.assertIn("liquidation is inside", wide.detail)
+        narrow_cap = plan_long_size(
+            close=100.0,
+            atr=10.0,
+            atr_stop_mult=1.5,
+            reward_r=2.0,
+            fixed_loss_usdt=15.0,
+            price_tick=0.1,
+            size_step=0.0001,
+            min_qty=0.0001,
+            min_notional_usdt=5.0,
+            leverage=5,
+            margin_remaining=3000.0,
+        )
+        self.assertEqual(narrow_cap.reason, "TRIGGER_LONG")
+        self.assertLessEqual(float(narrow_cap.risk_usdt), 15.0)
+
     def test_blackout_boundaries(self):
         inside = datetime(2026, 10, 9, 0, 15, 0, tzinfo=timezone.utc)
         outside = datetime(2026, 10, 9, 0, 15, 1, tzinfo=timezone.utc)
