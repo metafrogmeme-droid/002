@@ -376,6 +376,12 @@ class VariantTests(unittest.TestCase):
         with self.assertRaises(ConfigError):
             load_config(raw)
 
+    def test_maker_target_is_an_exit_switch(self):
+        raw = yaml.safe_load((PACKAGE / "manifest.yaml").read_text(encoding="utf-8"))["strategy_config"]
+        raw["exit_style"] = "maker_tp"
+        self.assertEqual(load_config(raw).exit_style, "maker_tp")
+        self.assertEqual(_config().exit_style, "fixed_2r")
+
     def test_pullback_is_the_only_change_from_a_cross(self):
         cfg = replace(_config(), entry_style="pullback")
         decision = decide(

@@ -183,6 +183,8 @@ def _finish(cfg: Any, result: Any, coverage: list[dict[str, Any]], start_ms: int
                 "fill_identity": identity,
                 "window_label": cfg.window_label,
                 "entry_style": cfg.entry_style,
+                "exit_style": cfg.exit_style,
+                "exit_model": _exit_model(),
                 "coverage": [
                     {
                         "symbol": item.get("symbol"),
@@ -264,6 +266,19 @@ def _engine_count(result: Any, key: str) -> int | None:
         if isinstance(raw.get(key), int):
             return int(raw[key])
     return None
+
+
+def _exit_model() -> dict[str, Any]:
+    path = OUTPUT / "exit_model.json"
+    if not path.exists():
+        return {"maker_tp": "off"}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"maker_tp": "unreadable"}
+    if not isinstance(payload, dict):
+        return {"maker_tp": "unreadable"}
+    return {"maker_tp": payload.get("maker_tp")}
 
 
 def _liquidation_skips() -> dict[str, Any]:

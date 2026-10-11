@@ -211,7 +211,7 @@ def load_config(strategy_config: Mapping[str, Any] | None) -> Config:
         fee_tier_status=str(_require(cfg, "fee_tier_status")),
         version_label=str(_require(cfg, "version_label")),
         entry_style=_choice(cfg, "entry_style", "cross", {"cross", "pullback", "mean_reversion"}),
-        exit_style=_choice(cfg, "exit_style", "fixed_2r", {"fixed_2r", "partial_trail"}),
+        exit_style=_choice(cfg, "exit_style", "fixed_2r", {"fixed_2r", "partial_trail", "maker_tp"}),
         htf_filter=_optional_bool(cfg, "htf_filter", False),
         research_side=_choice(cfg, "research_side", "long", {"long", "short"}),
         window_label=_choice(cfg, "window_label", "full", {"full", "train"}),

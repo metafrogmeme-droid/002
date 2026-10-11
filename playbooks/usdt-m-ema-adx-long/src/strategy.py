@@ -92,6 +92,7 @@ class EmaAdxLongStrategy(Strategy):
         self._pending: dict[str, dict[str, Any]] = {}
         self._open: dict[str, dict[str, Any]] = {}
         self._closed: list[ClosedTrade] = []
+        self._maker_tp_mode = "off"
         self._daily: dict[str, float] = {}
         self._cumulative = 0.0
         self._consecutive_losses = 0
@@ -347,6 +348,7 @@ class EmaAdxLongStrategy(Strategy):
             self.cancel_all_orders(instrument_id)
             self.close_all_positions(instrument_id)
         self._write_closed_trades()
+        self._write_exit_model()
 
     def _maybe_enter(
         self,
@@ -459,16 +461,27 @@ class EmaAdxLongStrategy(Strategy):
             if cfg.exit_style == "partial_trail" and decision.side == "long":
                 self._submit_partial(instrument, decision, entry, stop)
             else:
-                order_list = self.order_factory.bracket(
-                    instrument_id=instrument.id,
-                    order_side=order_side,
-                    quantity=qty,
-                    time_in_force=TimeInForce.GTC,
-                    entry_price=entry,
-                    sl_trigger_price=stop,
-                    tp_price=target,
-                    entry_order_type=OrderType.LIMIT,
-                )
+                kwargs = {
+                    "instrument_id": instrument.id,
+                    "order_side": order_side,
+                    "quantity": qty,
+                    "time_in_force": TimeInForce.GTC,
+                    "entry_price": entry,
+                    "sl_trigger_price": stop,
+                    "tp_price": target,
+                    "entry_order_type": OrderType.LIMIT,
+                }
+                if cfg.exit_style == "maker_tp":
+                    kwargs["tp_post_only"] = True
+                    self._maker_tp_mode = "post_only"
+                try:
+                    order_list = self.order_factory.bracket(**kwargs)
+                except TypeError as exc:
+                    if "tp_post_only" not in kwargs or "tp_post_only" not in str(exc):
+                        raise
+                    kwargs.pop("tp_post_only", None)
+                    self._maker_tp_mode = "unsupported"
+                    order_list = self.order_factory.bracket(**kwargs)
                 self.submit_order_list(order_list)
         except Exception as exc:
             self._append(
@@ -742,6 +755,13 @@ class EmaAdxLongStrategy(Strategy):
             for trade in self._closed
         ]
         path.write_text(json.dumps(payload), encoding="utf-8")
+
+    def _write_exit_model(self) -> None:
+        path = self._output / "exit_model.json"
+        path.write_text(
+            json.dumps({"maker_tp": self._maker_tp_mode}),
+            encoding="utf-8",
+        )
 
 
 def _symbol(value: Any) -> str:
