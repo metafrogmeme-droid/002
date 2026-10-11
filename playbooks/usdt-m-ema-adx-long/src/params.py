@@ -214,7 +214,7 @@ def load_config(strategy_config: Mapping[str, Any] | None) -> Config:
         exit_style=_choice(cfg, "exit_style", "fixed_2r", {"fixed_2r", "partial_trail", "maker_tp"}),
         htf_filter=_optional_bool(cfg, "htf_filter", False),
         research_side=_choice(cfg, "research_side", "long", {"long", "short"}),
-        window_label=_choice(cfg, "window_label", "full", {"full", "train"}),
+        window_label=_choice(cfg, "window_label", "full", {"full", "train", "test"}),
         price_tick=_as_symbol_floats(cfg, "price_tick", symbols),
         size_step=_as_symbol_floats(cfg, "size_step", symbols),
         min_qty=_as_symbol_floats(cfg, "min_qty", symbols),

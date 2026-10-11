@@ -382,6 +382,16 @@ class VariantTests(unittest.TestCase):
         self.assertEqual(cfg.bar_hours, 1)
         self.assertFalse(cfg.htf_filter)
         self.assertEqual(cfg.research_side, "long")
+        self.assertEqual(cfg.window_label, "full")
+
+    def test_test_window_label_does_not_change_the_halt(self):
+        raw = yaml.safe_load((PACKAGE / "manifest.yaml").read_text(encoding="utf-8"))["strategy_config"]
+        raw["window_label"] = "test"
+        cfg = load_config(raw)
+        self.assertEqual(cfg.window_label, "test")
+        self.assertEqual(cfg.playbook_stop_usdt, _config().playbook_stop_usdt)
+        self.assertEqual(cfg.fixed_loss_usdt, 15)
+        self.assertEqual(cfg.leverage, 10)
         decision = decide(_snapshot(prev_fast_ema=101.0, fast_ema=102.0), cfg, _account())
         self.assertEqual(decision.reason_code, "FILTER_NO_CROSS")
 
