@@ -41,7 +41,10 @@ def run() -> None:
     coverage: list[dict[str, Any]] = []
     try:
         for symbol in cfg.trading_symbols:
-            frame, cov = build_replay_frame(symbol, start_ms, end_ms, bar_hours=cfg.bar_hours)
+            # The engine bar type stays 1H. A 4H external bar type completed
+            # with zero orders after coverage passed (pbrun-a90f884eaf4c).
+            # The 4H candidate folds these hourly bars in the strategy.
+            frame, cov = build_replay_frame(symbol, start_ms, end_ms, bar_hours=1)
             frames[f"{symbol}.BITGET"] = frame
             coverage.append(cov)
         problem = _frame_problem(frames)
@@ -234,7 +237,8 @@ def _coverage_ok(
         fund_last = item.get("funding_last_ms")
         if not all(isinstance(value, int) for value in (first, last, fund_first, fund_last)):
             return False
-        if first > start_ms + HOUR_MS or not kline_tail_covers(last, end_ms, bar_hours):
+        series_hours = item.get("bar_hours") if item.get("bar_hours") in (1, 4) else bar_hours
+        if first > start_ms + HOUR_MS or not kline_tail_covers(last, end_ms, series_hours):
             return False
         if fund_first > start_ms + 24 * HOUR_MS or fund_last < end_ms - 24 * HOUR_MS:
             return False

@@ -35,6 +35,7 @@ from risk import (  # noqa: E402
     ohlc_is_valid,
     coverage_tail_allowance_ms,
     funding_page_ignores_window,
+    fold_hour_bar,
     funding_rate_from_managed,
     kline_tail_covers,
     funding_series_gap_ms,
@@ -322,6 +323,38 @@ class RiskTests(unittest.TestCase):
         self.assertTrue(kline_tail_covers(last_4h, end, 4))
         self.assertTrue(kline_tail_covers(end - 5 * hour, end, 4))
         self.assertFalse(kline_tail_covers(end - 5 * hour - 1, end, 4))
+
+    def test_four_hourly_bars_fold_into_one_closed_4h_bar(self):
+        bucket = None
+        completed = None
+        stamps = (
+            (datetime(2026, 4, 8, 20, tzinfo=timezone.utc), 10.0, 12.0, 9.0, 11.0, 1.0),
+            (datetime(2026, 4, 8, 21, tzinfo=timezone.utc), 11.0, 13.0, 10.0, 12.0, 1.0),
+            (datetime(2026, 4, 8, 22, tzinfo=timezone.utc), 12.0, 14.0, 8.0, 9.0, 1.0),
+            (datetime(2026, 4, 8, 23, tzinfo=timezone.utc), 9.0, 10.0, 7.0, 8.0, 1.0),
+            (datetime(2026, 4, 9, 0, tzinfo=timezone.utc), 8.0, 9.0, 8.0, 9.0, 1.0),
+        )
+        for open_ts, open_, high, low, close, volume in stamps:
+            completed, bucket = fold_hour_bar(bucket, open_ts, open_, high, low, close, volume)
+        self.assertIsNotNone(completed)
+        assert completed is not None
+        self.assertEqual(completed["open"], 10.0)
+        self.assertEqual(completed["high"], 14.0)
+        self.assertEqual(completed["low"], 7.0)
+        self.assertEqual(completed["close"], 8.0)
+        self.assertEqual(completed["volume"], 4.0)
+        self.assertEqual(completed["hours"], 4)
+        self.assertEqual(bucket["hours"], 1)
+        short = None
+        for hour in (0, 1, 2):
+            done, short = fold_hour_bar(
+                short, datetime(2026, 4, 8, hour, tzinfo=timezone.utc), 1.0, 1.0, 1.0, 1.0, 1.0
+            )
+            self.assertIsNone(done)
+        done, short = fold_hour_bar(
+            short, datetime(2026, 4, 8, 4, tzinfo=timezone.utc), 1.0, 2.0, 1.0, 2.0, 1.0
+        )
+        self.assertIsNone(done)
 
     def test_exposure_window_overlaps_funding(self):
         start = datetime(2026, 10, 9, 7, 0, tzinfo=timezone.utc)

@@ -40,6 +40,7 @@ try:
     from .risk import (
         ClosedTrade,
         exposure_hits_blackout,
+        fold_hour_bar,
         is_funding_settlement,
         quantize_floor,
         quantize_nearest,
@@ -66,6 +67,7 @@ except ImportError:
     from risk import (
         ClosedTrade,
         exposure_hits_blackout,
+        fold_hour_bar,
         is_funding_settlement,
         quantize_floor,
         quantize_nearest,
@@ -99,6 +101,9 @@ class EmaAdxLongStrategy(Strategy):
         self._funding_blocked = False
         self._stopping = False
         self._skip_engine = False
+        self._bars_seen = 0
+        self._four_hour_closed = 0
+        self._hour_buckets: dict[str, dict[str, Any]] = {}
         self._halt_logged: set[str] = set()
         self._funding_maps: dict[str, list[tuple[int, float]]] = {}
         self.feature_frames: dict[Any, Any] | None = None
@@ -146,13 +151,6 @@ class EmaAdxLongStrategy(Strategy):
             instrument_ids = [
                 InstrumentId.from_str(f"{symbol}.BITGET") for symbol in cfg.trading_symbols
             ]
-        if cfg.bar_hours == 4:
-            # The hourly schedule still wakes the process. Only a closed 4H
-            # bar is subscribed, so a 1H spec cannot drive this candidate.
-            bar_types = [
-                BarType.from_str(f"{symbol}.BITGET-4-HOUR-LAST-EXTERNAL")
-                for symbol in cfg.trading_symbols
-            ]
         if not bar_types:
             bar_types = [
                 BarType.from_str(f"{symbol}.BITGET-{cfg.bar_hours}-HOUR-LAST-EXTERNAL")
@@ -178,6 +176,7 @@ class EmaAdxLongStrategy(Strategy):
             )
 
     def on_bar(self, bar: Bar) -> None:
+        self._bars_seen += 1
         if self._skip_engine or self.playbook is None:
             return
         symbol = _symbol(bar.bar_type.instrument_id)
@@ -201,13 +200,40 @@ class EmaAdxLongStrategy(Strategy):
         high = _num(bar.high)
         low = _num(bar.low)
         close = _num(bar.close)
-        values = book.update(high, low, close, _num(bar.volume))
+        volume = _num(bar.volume)
+        open_ts = datetime.fromtimestamp(bar.ts_event / 1_000_000_000, tz=timezone.utc)
+        if self.playbook.bar_hours == 4:
+            # Hourly engine bars. Indicators, the cross, and the entry run
+            # only after four hours have closed. Stops and funding still see
+            # each hour, because a stop-market can fill inside the 4H bar.
+            hour_close = open_ts + timedelta(hours=1)
+            self._charge_funding(symbol, open_ts, instrument)
+            self._manage_symbol(symbol, instrument, hour_close, high, low, close, None)
+            completed, self._hour_buckets[symbol] = fold_hour_bar(
+                self._hour_buckets.get(symbol),
+                open_ts,
+                _num(bar.open),
+                high,
+                low,
+                close,
+                volume,
+            )
+            if completed is None:
+                return
+            self._four_hour_closed += 1
+            high = float(completed["high"])
+            low = float(completed["low"])
+            close = float(completed["close"])
+            volume = float(completed["volume"])
+            close_ts = completed["start"] + timedelta(hours=4)
+        else:
+            close_ts = open_ts + timedelta(hours=self.playbook.bar_hours)
+            self._charge_funding(symbol, open_ts, instrument)
+        values = book.update(high, low, close, volume)
         htf = self._htf.setdefault(symbol, FourHourSlope())
         values["htf_up"] = htf.update(close)
-        open_ts = datetime.fromtimestamp(bar.ts_event / 1_000_000_000, tz=timezone.utc)
-        close_ts = open_ts + timedelta(hours=self.playbook.bar_hours)
-        self._charge_funding(symbol, open_ts, instrument)
-        self._manage_symbol(symbol, instrument, close_ts, high, low, close, values.get("atr"))
+        if self.playbook.bar_hours != 4:
+            self._manage_symbol(symbol, instrument, close_ts, high, low, close, values.get("atr"))
         self._maybe_enter(symbol, instrument, close_ts, values)
 
     def on_order_filled(self, event: Any) -> None:
@@ -759,7 +785,13 @@ class EmaAdxLongStrategy(Strategy):
     def _write_exit_model(self) -> None:
         path = self._output / "exit_model.json"
         path.write_text(
-            json.dumps({"maker_tp": self._maker_tp_mode}),
+            json.dumps(
+                {
+                    "maker_tp": self._maker_tp_mode,
+                    "bars_seen": self._bars_seen,
+                    "four_hour_closed": self._four_hour_closed,
+                }
+            ),
             encoding="utf-8",
         )
 

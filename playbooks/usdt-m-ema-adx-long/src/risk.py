@@ -8,7 +8,7 @@ import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP
-from typing import Sequence
+from typing import Any, Sequence
 
 
 FUNDING_HOURS = (0, 8, 16)
@@ -34,6 +34,47 @@ def coverage_tail_allowance_ms(bar_hours: int) -> int:
 def kline_tail_covers(last_ms: int, end_ms: int, bar_hours: int) -> bool:
     """True when the last kline timestamp sits inside the interval-sized tail."""
     return last_ms >= end_ms - coverage_tail_allowance_ms(bar_hours)
+
+
+def four_hour_open(open_ts: datetime) -> datetime:
+    """Start of the 4H window that contains this 1H bar open."""
+    hour = open_ts.hour - (open_ts.hour % 4)
+    return open_ts.replace(hour=hour, minute=0, second=0, microsecond=0)
+
+
+def fold_hour_bar(
+    bucket: dict[str, Any] | None,
+    open_ts: datetime,
+    open_: float,
+    high: float,
+    low: float,
+    close: float,
+    volume: float,
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """Fold one 1H bar into a 4H bucket.
+
+    The completed bucket is returned only when it holds four hourly bars.
+    A short bucket at a gap is dropped rather than treated as a 4H bar.
+    """
+    start = four_hour_open(open_ts)
+    fresh = {
+        "start": start,
+        "open": open_,
+        "high": high,
+        "low": low,
+        "close": close,
+        "volume": volume,
+        "hours": 1,
+    }
+    if bucket is None or bucket.get("start") != start:
+        completed = bucket if bucket is not None and bucket.get("hours") == 4 else None
+        return completed, fresh
+    bucket["high"] = max(float(bucket["high"]), high)
+    bucket["low"] = min(float(bucket["low"]), low)
+    bucket["close"] = close
+    bucket["volume"] = float(bucket["volume"]) + volume
+    bucket["hours"] = int(bucket["hours"]) + 1
+    return None, bucket
 
 
 def funding_rate_from_managed(raw: float) -> float:
