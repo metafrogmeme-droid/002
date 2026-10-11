@@ -518,55 +518,63 @@ def build_replay_frame(symbol: str, start_ms: int, end_ms: int) -> tuple[Any, di
 
 
 def _fit_replay_prices(frame: Any, symbol: str) -> Any:
-    """Drop bars the replay engine will reject, and snap only those bars.
+    """Return a new OHLC frame on the contract increment.
 
-    `build_feature_frame` can leave a price column off the exchange print.
-    A bar whose low sits above open or close once it is on the contract
-    increment is rewritten onto that increment. Every other print is kept.
+    The joined frame is not mutated in place. A bar that is not a positive
+    price, or that still has low above open after the tick snap, is dropped.
+    A one-tick gap versus the previous close is pulled inside the bar so the
+    replay engine can stitch last prices. The close is not rewritten.
     """
     try:
-        from .risk import align_ohlc_to_tick
+        from .risk import align_ohlc_to_tick, expand_bar_to_prior_close, ohlc_is_valid
     except ImportError:
-        from risk import align_ohlc_to_tick
+        from risk import align_ohlc_to_tick, expand_bar_to_prior_close, ohlc_is_valid
 
     if len(frame) == 0:
         return frame
     work = frame.copy()
     if bool(getattr(work.index, "has_duplicates", False)):
         work = work[~work.index.duplicated(keep="last")]
+    work = work.sort_index()
     tick = _PRICE_TICK.get(symbol)
-    keep: list[bool] = []
-    for ts in list(work.index):
+    index: list[Any] = []
+    rows: list[tuple[float, float, float, float, float, float]] = []
+    prior_close: float | None = None
+    for ts in work.index:
         try:
             open_ = float(work.at[ts, "open"])
             high = float(work.at[ts, "high"])
             low = float(work.at[ts, "low"])
             close = float(work.at[ts, "close"])
+            volume = float(work.at[ts, "volume"])
+            funding = float(work.at[ts, "funding_rate"]) if "funding_rate" in work.columns else float("nan")
         except (TypeError, ValueError, KeyError):
-            keep.append(False)
             continue
         if tick is None:
-            keep.append(True)
-            continue
-        fitted = align_ohlc_to_tick(open_, high, low, close, tick)
+            fitted = (open_, high, low, close) if ohlc_is_valid(open_, high, low, close) else None
+        else:
+            fitted = align_ohlc_to_tick(open_, high, low, close, tick)
         if fitted is None:
-            keep.append(False)
             continue
         fitted_open, fitted_high, fitted_low, fitted_close = fitted
-        work.at[ts, "open"] = fitted_open
-        work.at[ts, "high"] = fitted_high
-        work.at[ts, "low"] = fitted_low
-        work.at[ts, "close"] = fitted_close
-        keep.append(True)
-    if keep and not all(keep):
-        work = work.iloc[[i for i, ok in enumerate(keep) if ok]]
-    ordered = [
-        column
-        for column in ("open", "high", "low", "close", "volume", "funding_rate")
-        if column in work.columns
-    ]
-    extras = [column for column in work.columns if column not in ordered]
-    return work.loc[:, ordered + extras]
+        if prior_close is not None and tick is not None:
+            stitched = expand_bar_to_prior_close(
+                fitted_open, fitted_high, fitted_low, fitted_close, prior_close, tick
+            )
+            if stitched is None:
+                continue
+            fitted_open, fitted_high, fitted_low, fitted_close = stitched
+        if not ohlc_is_valid(fitted_open, fitted_high, fitted_low, fitted_close):
+            continue
+        index.append(ts)
+        rows.append((fitted_open, fitted_high, fitted_low, fitted_close, volume, funding))
+        prior_close = fitted_close
+    rebuilt = pd.DataFrame(
+        rows,
+        index=pd.Index(index, name=getattr(work.index, "name", None)),
+        columns=["open", "high", "low", "close", "volume", "funding_rate"],
+    )
+    return rebuilt.astype("float64")
 
 
 def _restore_kline_prices(frame: Any, bars: list[dict[str, Any]]) -> Any:

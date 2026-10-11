@@ -4,6 +4,7 @@ Sizing targets a fixed USDT loss at the stop. Quantity is floored to the
 exchange size step so the loss at the stop is not larger than that fixed loss.
 """
 
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP
@@ -48,26 +49,89 @@ def align_ohlc_to_tick(
     """Return a bar on the exchange increment, or None when it is not a price.
 
     Every price is moved to the nearest tick. If that would put low above
-    open or close, low and high are pulled back onto the same grid. Off-tick
-    prints are not passed through: the engine rejects a fill whose precision
-    is finer than the instrument. Nothing is interpolated and no strategy
+    open or close, low and high are pulled back onto the same grid. The
+    returned floats are then checked the way the replay engine rounds a
+    float onto the instrument precision (half away from zero). Off-tick
+    prints are not passed through. Nothing is interpolated and no strategy
     threshold changes.
     """
     if not ohlc_is_valid(open_, high, low, close) or tick <= 0:
         return None
+    step = _decimal(tick)
+    places = _tick_places(step)
     o = quantize_nearest(open_, tick)
     h = quantize_nearest(high, tick)
     l = quantize_nearest(low, tick)
     c = quantize_nearest(close, tick)
-    if not (l <= o and l <= c and h >= o and h >= c and l <= h):
-        l = min(o, c)
-        h = max(o, c, h)
+    l = min(l, o, c)
+    h = max(h, o, c)
     if l <= 0 or h < l:
         return None
-    places = max(0, -_decimal(tick).as_tuple().exponent)
-    def _emit(value: Decimal) -> float:
-        return float(f"{value:.{places}f}")
-    return (_emit(o), _emit(h), _emit(l), _emit(c))
+    emitted = tuple(_emit_tick(value, places) for value in (o, h, l, c))
+    return _clamp_engine_bar(emitted, step, places)
+
+
+def expand_bar_to_prior_close(
+    open_: float,
+    high: float,
+    low: float,
+    close: float,
+    prior_close: float,
+    tick: float,
+) -> tuple[float, float, float, float] | None:
+    """Keep a one-tick rounding gap from the previous close inside the bar.
+
+    A larger gap is a real print and is left unchanged. The close is not
+    rewritten.
+    """
+    if not ohlc_is_valid(open_, high, low, close) or tick <= 0:
+        return None
+    if prior_close != prior_close or prior_close in (float("inf"), float("-inf")) or prior_close <= 0:
+        return (open_, high, low, close)
+    if prior_close < low and (low - prior_close) <= tick + tick * 1e-9:
+        low = prior_close
+    elif prior_close > high and (prior_close - high) <= tick + tick * 1e-9:
+        high = prior_close
+    if not ohlc_is_valid(open_, high, low, close):
+        return None
+    return (open_, high, low, close)
+
+
+def _tick_places(step: Decimal) -> int:
+    exponent = step.as_tuple().exponent
+    if not isinstance(exponent, int):
+        return 0
+    return max(0, -exponent)
+
+
+def _emit_tick(value: Decimal, places: int) -> float:
+    return float(f"{value:.{places}f}")
+
+
+def _engine_units(value: float, places: int) -> int:
+    """Match Rust ``f64::round``: half away from zero, at the instrument precision."""
+    scaled = float(value) * float(10 ** places)
+    if scaled >= 0:
+        return int(math.floor(scaled + 0.5))
+    return int(math.ceil(scaled - 0.5))
+
+
+def _clamp_engine_bar(
+    bar: tuple[float, float, float, float], step: Decimal, places: int
+) -> tuple[float, float, float, float] | None:
+    """Expand high and low onto the same units the engine will compare."""
+    units = [_engine_units(value, places) for value in bar]
+    units[2] = min(units)
+    units[1] = max(units)
+    if units[2] <= 0 or units[1] < units[2]:
+        return None
+    emitted = tuple(_emit_tick(Decimal(unit) * step, places) for unit in units)
+    checked = [_engine_units(value, places) for value in emitted]
+    if checked != units:
+        return None
+    if not ohlc_is_valid(*emitted):
+        return None
+    return emitted
 
 
 def funding_series_gap_ms(stamps: Sequence[int], max_gap_ms: int) -> int | None:

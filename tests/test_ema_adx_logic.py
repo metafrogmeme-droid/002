@@ -27,6 +27,7 @@ from report import activation_verdict, fill_identity  # noqa: E402
 from risk import (  # noqa: E402
     ClosedTrade,
     align_ohlc_to_tick,
+    expand_bar_to_prior_close,
     exposure_hits_blackout,
     millis_from_bar_clock,
     ohlc_is_valid,
@@ -262,6 +263,20 @@ class RiskTests(unittest.TestCase):
             align_ohlc_to_tick(100.006, 100.02, 100.004, 100.01, 0.01),
             (100.01, 100.02, 100.0, 100.01),
         )
+        eth = align_ohlc_to_tick(2345.504, 2345.61, 2345.499, 2345.50, 0.01)
+        self.assertIsNotNone(eth)
+        assert eth is not None
+        eth_open, eth_high, eth_low, eth_close = eth
+        self.assertLessEqual(eth_low, eth_open)
+        self.assertLessEqual(eth_low, eth_close)
+        self.assertGreaterEqual(eth_high, eth_open)
+        self.assertGreaterEqual(eth_high, eth_close)
+
+    def test_one_tick_gap_from_the_prior_close_stays_inside_the_bar(self):
+        stitched = expand_bar_to_prior_close(100.02, 100.05, 100.02, 100.04, 100.01, 0.01)
+        self.assertEqual(stitched, (100.02, 100.05, 100.01, 100.04))
+        untouched = expand_bar_to_prior_close(100.20, 100.30, 100.20, 100.25, 100.00, 0.01)
+        self.assertEqual(untouched, (100.20, 100.30, 100.20, 100.25))
 
     def test_funding_gap_is_reported_and_not_filled(self):
         day = 24 * 60 * 60 * 1000

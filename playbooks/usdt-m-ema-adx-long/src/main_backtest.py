@@ -44,6 +44,9 @@ def run() -> None:
             frame, cov = build_replay_frame(symbol, start_ms, end_ms)
             frames[f"{symbol}.BITGET"] = frame
             coverage.append(cov)
+        problem = _frame_problem(frames)
+        if problem:
+            raise DataCoverageError(problem)
         result = backtest.run(ohlcv_data=frames, spec=runtime.backtest_spec)
     except DataCoverageError as exc:
         _fail(str(exc), coverage=coverage)
@@ -370,6 +373,29 @@ def _write_equity(trades: list[ClosedTrade], start_equity: float, start_iso: str
     text = "\n".join(lines) + "\n"
     for directory in _output_dirs():
         (directory / "equity_curve.csv").write_text(text, encoding="utf-8")
+
+
+def _frame_problem(frames: dict[str, Any]) -> str | None:
+    """Name the first bar the replay engine would reject, if one remains."""
+    try:
+        from .risk import ohlc_is_valid
+    except ImportError:
+        from risk import ohlc_is_valid
+
+    for key, frame in frames.items():
+        for ts in frame.index:
+            try:
+                open_ = float(frame.at[ts, "open"])
+                high = float(frame.at[ts, "high"])
+                low = float(frame.at[ts, "low"])
+                close = float(frame.at[ts, "close"])
+            except (TypeError, ValueError, KeyError) as exc:
+                return f"{key} {ts} unreadable OHLC ({exc})"
+            if not ohlc_is_valid(open_, high, low, close):
+                return (
+                    f"{key} {ts} open={open_} high={high} low={low} close={close}"
+                )
+    return None
 
 
 def _fail(reason: str, coverage: list[dict[str, Any]] | None = None) -> None:
