@@ -19,6 +19,7 @@ try:
     from .params import Config, ConfigError, load_config
     from .reasons import (
         FILTER_FUNDING_WINDOW,
+        ORDER_CANCEL_FUNDING_WINDOW,
         HALT_CONSECUTIVE_LOSSES,
         HALT_DAILY_LOSS,
         HALT_FOREIGN_POSITION,
@@ -28,6 +29,15 @@ try:
         ORDER_CANCEL_UNFILLED,
         ORDER_REJECTED,
     )
+    from .live_book import (
+        bars_are_stale,
+        book_realised,
+        choose_order_qty,
+        mark_filled,
+        net_from_fill_rows,
+        parse_utc,
+        time_stop_due,
+    )
     from .risk import exposure_hits_blackout, in_funding_blackout
 except ImportError:
     from action_log import action_row
@@ -36,6 +46,7 @@ except ImportError:
     from params import Config, ConfigError, load_config
     from reasons import (
         FILTER_FUNDING_WINDOW,
+        ORDER_CANCEL_FUNDING_WINDOW,
         HALT_CONSECUTIVE_LOSSES,
         HALT_DAILY_LOSS,
         HALT_FOREIGN_POSITION,
@@ -44,6 +55,15 @@ except ImportError:
         MANAGE_TIME_STOP,
         ORDER_CANCEL_UNFILLED,
         ORDER_REJECTED,
+    )
+    from live_book import (
+        bars_are_stale,
+        book_realised,
+        choose_order_qty,
+        mark_filled,
+        net_from_fill_rows,
+        parse_utc,
+        time_stop_due,
     )
     from risk import exposure_hits_blackout, in_funding_blackout
 
@@ -106,16 +126,14 @@ def _plans(
     for symbol, item in owned.items():
         if symbol in foreign:
             continue
-        opened = _parse_ts(item.get("opened_at"))
         if item.get("status") == "pending":
             expire = _parse_ts(item.get("expire_at"))
             if expire is not None and now >= expire:
                 plans.append({"kind": "cancel", "symbol": symbol, "order_id": item.get("order_id") or ""})
             elif exposure_hits_blackout(now, now + timedelta(hours=cfg.bar_hours), cfg.funding_blackout_minutes):
-                plans.append({"kind": "cancel", "symbol": symbol, "order_id": item.get("order_id") or ""})
-        elif item.get("status") == "open" and opened is not None:
-            if now >= opened + timedelta(hours=cfg.time_stop_hours):
-                plans.append({"kind": "time_stop", "symbol": symbol})
+                plans.append({"kind": "cancel_funding", "symbol": symbol, "order_id": item.get("order_id") or ""})
+        elif item.get("status") == "open" and time_stop_due(item.get("filled_at"), now, cfg.time_stop_hours):
+            plans.append({"kind": "time_stop", "symbol": symbol})
     if any(plan["kind"] == "time_stop" for plan in plans):
         return plans, hold_reason
     if _halted(state, cfg):
@@ -181,7 +199,7 @@ def _live_decision(cfg: Config, state: dict[str, Any], symbol: str, now: datetim
         except (KeyError, TypeError, ValueError):
             return _hold_decision("INVALID_SIGNAL")
         last_open = row.get("time") or row.get("timestamp") or row.get("date")
-    if _bars_are_stale(last_open, now, cfg.bar_hours):
+    if bars_are_stale(_coerce_ms(last_open) if _coerce_ms(last_open) is not None else _ms_from_any(last_open), now, cfg.bar_hours):
         return _hold_decision("HALT_STALE_DATA")
     try:
         rules = trade.helpers.contract_rules(symbol, product_type="USDT-FUTURES")
@@ -253,14 +271,19 @@ def _emit_plan(cfg: Config, state: dict[str, Any], plan: dict[str, Any]) -> None
             execute_trade=lambda: _execute_entry(cfg, state, symbol, decision),
         )
         return
-    if kind == "cancel":
+    if kind in {"cancel", "cancel_funding"}:
         runtime.emit_signal_or_follow(
             action="close",
             symbol=symbol,
             confidence=0.0,
-            reason_code=ORDER_CANCEL_UNFILLED,
+            reason_code=ORDER_CANCEL_FUNDING_WINDOW if kind == "cancel_funding" else ORDER_CANCEL_UNFILLED,
             reason_text="cancel unfilled entry; do not flatten a filled position",
-            execute_trade=lambda: _execute_cancel(state, symbol, str(plan.get("order_id") or "")),
+            execute_trade=lambda: _execute_cancel(
+                state,
+                symbol,
+                str(plan.get("order_id") or ""),
+                ORDER_CANCEL_FUNDING_WINDOW if kind == "cancel_funding" else ORDER_CANCEL_UNFILLED,
+            ),
         )
         return
     runtime.emit_signal_or_follow(
@@ -293,13 +316,15 @@ def _execute_entry(cfg: Config, state: dict[str, Any], symbol: str, decision: An
         price=str(decision.entry),
         product_type="USDT-FUTURES",
     )
-    qty = Decimal(str(qty_plan.qty))
     entry_price = Decimal(str(decision.entry))
     stop_distance = entry_price - Decimal(str(decision.stop))
     if entry_price > 0 and stop_distance / entry_price >= Decimal(1) / Decimal(leverage):
         _log_reject(symbol, "SKIP_LIQUIDATION_INSIDE_STOP isolated liquidation is inside the stop")
         return {"status": "rejected"}
-    if stop_distance <= 0 or qty * stop_distance > Decimal(str(cfg.fixed_loss_usdt)) + Decimal("0.01"):
+    planned = Decimal(str(decision.qty or 0))
+    helper = Decimal(str(qty_plan.qty))
+    qty = choose_order_qty(planned, helper, stop_distance, Decimal(str(cfg.fixed_loss_usdt)))
+    if qty is None:
         _log_reject(symbol, "computed qty would risk more than the fixed loss")
         return {"status": "rejected"}
     tpsl = trade.helpers.resolve_contract_tpsl(
@@ -355,7 +380,7 @@ def _execute_entry(cfg: Config, state: dict[str, Any], symbol: str, decision: An
     return {"status": "submitted", "qty": str(qty)}
 
 
-def _execute_cancel(state: dict[str, Any], symbol: str, order_id: str) -> dict[str, Any]:
+def _execute_cancel(state: dict[str, Any], symbol: str, order_id: str, reason: str = ORDER_CANCEL_UNFILLED) -> dict[str, Any]:
     if not order_id:
         _log_reject(symbol, "no owned order id; refusing to cancel an unknown order")
         return {"status": "rejected"}
@@ -382,7 +407,7 @@ def _execute_cancel(state: dict[str, Any], symbol: str, order_id: str) -> dict[s
             timestamp=datetime.now(timezone.utc),
             symbol=symbol,
             side="none",
-            reason_code=ORDER_CANCEL_UNFILLED,
+            reason_code=reason,
         )
     )
     return {"status": "cancelled"}
@@ -463,15 +488,38 @@ def _ticker_age_seconds(symbol: str, now: datetime) -> float | None:
     return None
 
 
-def _bars_are_stale(last_open: Any, now: datetime, bar_hours: int) -> bool:
-    stamp = _coerce_ms(last_open)
-    if stamp is None:
-        parsed = _parse_ts(last_open)
-        if parsed is None:
-            return True
-        stamp = int(parsed.timestamp() * 1000)
-    interval_ms = bar_hours * 60 * 60 * 1000
-    return (now.timestamp() * 1000) - (stamp + interval_ms) > 2 * interval_ms
+def _ms_from_any(value: Any) -> int | None:
+    parsed = _parse_ts(value)
+    if parsed is None:
+        return None
+    return int(parsed.timestamp() * 1000)
+
+
+def _book_closed_position(state: dict[str, Any], item: dict[str, Any]) -> bool:
+    """Book exchange profit for a position that is gone. Unknown profit blocks new entries."""
+    symbol = str(item.get("symbol") or "")
+    try:
+        fills = trade.contract.fills(symbol=symbol, limit=50, product_type="USDT-FUTURES")
+    except Exception:
+        return False
+    if not trade.is_success(fills):
+        return False
+    rows = getattr(fills, "data", None)
+    if rows is None:
+        raw = getattr(fills, "raw", None)
+        rows = raw.get("data") if isinstance(raw, dict) else None
+    if isinstance(rows, dict):
+        rows = rows.get("fillList") or rows.get("list") or rows.get("rows")
+    after_ms = None
+    filled = parse_utc(item.get("filled_at"))
+    if filled is not None:
+        after_ms = int(filled.timestamp() * 1000)
+    net = net_from_fill_rows(rows if isinstance(rows, list) else [], after_ms)
+    if net is None:
+        return False
+    day = datetime.now(timezone.utc).date().isoformat()
+    book_realised(state, net, day)
+    return True
 
 
 def _read_positions() -> tuple[list[dict[str, Any]], bool]:
@@ -513,9 +561,18 @@ def _reconcile_owned(state: dict[str, Any], records: list[dict[str, Any]]) -> No
     for item in state.get("owned", []):
         symbol = str(item.get("symbol") or "")
         if item.get("status") == "pending" and symbol in live:
-            item["status"] = "open"
-            item.setdefault("opened_at", datetime.now(timezone.utc).isoformat())
+            mark_filled(item, datetime.now(timezone.utc).isoformat())
             changed = True
+        elif item.get("status") == "open" and symbol not in live:
+            if not _book_closed_position(state, item):
+                item["status"] = "closed_unbooked"
+                state["book_blocked"] = True
+            else:
+                item["status"] = "booked"
+            changed = True
+    state["owned"] = [
+        item for item in state.get("owned", []) if item.get("status") not in {"booked"}
+    ]
     if changed:
         _save_state(state)
 
@@ -535,6 +592,8 @@ def _foreign_symbols(records: list[dict[str, Any]], state: dict[str, Any]) -> li
 
 
 def _halt_reason(state: dict[str, Any], cfg: Config) -> str:
+    if state.get("book_blocked"):
+        return HALT_POSITION_UNREADABLE
     if int(state.get("consecutive_losses") or 0) >= cfg.max_consecutive_losses:
         return HALT_CONSECUTIVE_LOSSES
     if float(state.get("cumulative_realised") or 0.0) <= cfg.playbook_stop_usdt:
@@ -543,6 +602,8 @@ def _halt_reason(state: dict[str, Any], cfg: Config) -> str:
 
 
 def _halted(state: dict[str, Any], cfg: Config) -> bool:
+    if state.get("book_blocked"):
+        return True
     if int(state.get("consecutive_losses") or 0) >= cfg.max_consecutive_losses:
         return True
     if float(state.get("cumulative_realised") or 0.0) <= cfg.playbook_stop_usdt:
