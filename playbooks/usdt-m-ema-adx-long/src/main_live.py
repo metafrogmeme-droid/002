@@ -170,7 +170,7 @@ def _live_decision(cfg: Config, state: dict[str, Any], symbol: str, now: datetim
     ticker_age = _ticker_age_seconds(symbol, now)
     bars = data.crypto.futures.kline(
         symbol=symbol,
-        interval="1h",
+        interval="4h" if cfg.bar_hours == 4 else "1h",
         exchange="bitget",
         limit=max(cfg.atr_pct_lookback + cfg.ema_slow + 10, 100),
         closed_only=True,
@@ -199,8 +199,20 @@ def _live_decision(cfg: Config, state: dict[str, Any], symbol: str, now: datetim
         except (KeyError, TypeError, ValueError):
             return _hold_decision("INVALID_SIGNAL")
         last_open = row.get("time") or row.get("timestamp") or row.get("date")
-    if bars_are_stale(_coerce_ms(last_open) if _coerce_ms(last_open) is not None else _ms_from_any(last_open), now, cfg.bar_hours):
+    last_ms = _coerce_ms(last_open) if _coerce_ms(last_open) is not None else _ms_from_any(last_open)
+    if bars_are_stale(last_ms, now, cfg.bar_hours):
         return _hold_decision("HALT_STALE_DATA")
+    if cfg.bar_hours == 4:
+        # Hourly wakeups must not re-trade a 4H bar that was already read.
+        if last_ms is None or last_ms % (4 * 60 * 60 * 1000) != 0:
+            return _hold_decision("FILTER_NO_CROSS")
+        seen = state.setdefault("evaluated_bars", {})
+        if not isinstance(seen, dict):
+            seen = {}
+            state["evaluated_bars"] = seen
+        if seen.get(symbol) == last_ms:
+            return _hold_decision("FILTER_NO_CROSS")
+        seen[symbol] = last_ms
     try:
         rules = trade.helpers.contract_rules(symbol, product_type="USDT-FUTURES")
         tick = float(rules.price_step)

@@ -162,8 +162,8 @@ def load_config(strategy_config: Mapping[str, Any] | None) -> Config:
     if leverage > max_leverage:
         raise ConfigError("leverage exceeds max_leverage")
     bar_hours = _as_int(cfg, "bar_hours")
-    if bar_hours != 1:
-        raise ConfigError("v1 only supports 1H bars")
+    if bar_hours not in (1, 4):
+        raise ConfigError("bar_hours must be 1 or 4")
     reward_r = _as_float(cfg, "reward_r")
     if reward_r <= 0:
         raise ConfigError("reward_r must be positive")

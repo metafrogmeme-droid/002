@@ -362,10 +362,19 @@ class VariantTests(unittest.TestCase):
         cfg = _config()
         self.assertEqual(cfg.entry_style, "cross")
         self.assertEqual(cfg.exit_style, "fixed_2r")
+        self.assertEqual(cfg.bar_hours, 1)
         self.assertFalse(cfg.htf_filter)
         self.assertEqual(cfg.research_side, "long")
         decision = decide(_snapshot(prev_fast_ema=101.0, fast_ema=102.0), cfg, _account())
         self.assertEqual(decision.reason_code, "FILTER_NO_CROSS")
+
+    def test_four_hour_bars_are_the_only_extra_step(self):
+        raw = yaml.safe_load((PACKAGE / "manifest.yaml").read_text(encoding="utf-8"))["strategy_config"]
+        raw["bar_hours"] = 4
+        self.assertEqual(load_config(raw).bar_hours, 4)
+        raw["bar_hours"] = 2
+        with self.assertRaises(ConfigError):
+            load_config(raw)
 
     def test_pullback_is_the_only_change_from_a_cross(self):
         cfg = replace(_config(), entry_style="pullback")

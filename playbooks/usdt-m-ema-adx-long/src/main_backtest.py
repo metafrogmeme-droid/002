@@ -41,7 +41,7 @@ def run() -> None:
     coverage: list[dict[str, Any]] = []
     try:
         for symbol in cfg.trading_symbols:
-            frame, cov = build_replay_frame(symbol, start_ms, end_ms)
+            frame, cov = build_replay_frame(symbol, start_ms, end_ms, bar_hours=cfg.bar_hours)
             frames[f"{symbol}.BITGET"] = frame
             coverage.append(cov)
         problem = _frame_problem(frames)

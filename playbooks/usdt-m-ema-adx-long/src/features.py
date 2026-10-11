@@ -116,13 +116,14 @@ def _stitch(pages: list[Any]) -> list[dict[str, Any]]:
     return [merged[stamp] for stamp in sorted(merged)]
 
 
-def fetch_klines(symbol: str, start_ms: int, end_ms: int) -> list[dict[str, Any]]:
+def fetch_klines(symbol: str, start_ms: int, end_ms: int, bar_hours: int = 1) -> list[dict[str, Any]]:
+    interval = "4h" if bar_hours == 4 else "1h"
     pages = []
     for chunk_start, chunk_end in _chunk_bounds(start_ms, end_ms, KLINE_CHUNK_MS):
         pages.append(
             data.crypto.futures.kline(
                 symbol=symbol,
-                interval="1h",
+                interval=interval,
                 exchange="bitget",
                 start_time=chunk_start,
                 end_time=chunk_end,
@@ -136,7 +137,7 @@ def fetch_klines(symbol: str, start_ms: int, end_ms: int) -> list[dict[str, Any]
         if (stamp := _time_ms(row)) is not None and start_ms <= stamp < end_ms
     ]
     if not rows:
-        raise DataCoverageError(f"{symbol}: Bitget 1H kline stitch returned no rows")
+        raise DataCoverageError(f"{symbol}: Bitget {interval} kline stitch returned no rows")
     return rows
 
 
@@ -461,9 +462,11 @@ def _funding_for_replay(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return normalized
 
 
-def build_replay_frame(symbol: str, start_ms: int, end_ms: int) -> tuple[Any, dict[str, Any]]:
+def build_replay_frame(
+    symbol: str, start_ms: int, end_ms: int, bar_hours: int = 1
+) -> tuple[Any, dict[str, Any]]:
     native = resolve_bitget_perpetual(symbol)
-    bars = fetch_klines(native, start_ms, end_ms)
+    bars = fetch_klines(native, start_ms, end_ms, bar_hours=bar_hours)
     funding_rows, funding_info = fetch_funding(native, start_ms, end_ms)
     funding_symbol = str(funding_info.get("symbol") or native)
     frame = backtest.build_feature_frame(
@@ -504,6 +507,7 @@ def build_replay_frame(symbol: str, start_ms: int, end_ms: int) -> tuple[Any, di
         "funding_pages": funding_info.get("pages"),
         "funding_first_request": funding_info.get("first_request"),
         "funding_scale": "percent_display_divided_by_100",
+        "bar_hours": bar_hours,
         "kline_rows": len(bars),
         "funding_rows": len(funding_rows),
         "kline_first_ms": _time_ms(bars[0]),

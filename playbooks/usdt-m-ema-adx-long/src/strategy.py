@@ -145,9 +145,16 @@ class EmaAdxLongStrategy(Strategy):
             instrument_ids = [
                 InstrumentId.from_str(f"{symbol}.BITGET") for symbol in cfg.trading_symbols
             ]
+        if cfg.bar_hours == 4:
+            # The hourly schedule still wakes the process. Only a closed 4H
+            # bar is subscribed, so a 1H spec cannot drive this candidate.
+            bar_types = [
+                BarType.from_str(f"{symbol}.BITGET-4-HOUR-LAST-EXTERNAL")
+                for symbol in cfg.trading_symbols
+            ]
         if not bar_types:
             bar_types = [
-                BarType.from_str(f"{symbol}.BITGET-1-HOUR-LAST-EXTERNAL")
+                BarType.from_str(f"{symbol}.BITGET-{cfg.bar_hours}-HOUR-LAST-EXTERNAL")
                 for symbol in cfg.trading_symbols
             ]
         if not bar_types:
@@ -214,7 +221,8 @@ class EmaAdxLongStrategy(Strategy):
         entry_is_buy = pending is None or pending.get("side", "long") == "long"
         if pending is not None and (is_buy == entry_is_buy) and symbol not in self._open:
             pending = self._pending.pop(symbol)
-            same_bar = fill_ts <= pending["submit_ts"] + timedelta(hours=1)
+            bar_hours = self.playbook.bar_hours if self.playbook else 1
+            same_bar = fill_ts <= pending["submit_ts"] + timedelta(hours=bar_hours)
             self._open[symbol] = {
                 "fill_ts": fill_ts,
                 "qty": qty,
