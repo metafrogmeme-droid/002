@@ -76,6 +76,8 @@ def _finish(cfg: Any, result: Any, coverage: list[dict[str, Any]], start_ms: int
     train, test = split_by_entry(trades, cfg.walk_forward_split)
     train_summary = summarize(train, 1.0, cfg.margin_budget)
     test_summary = summarize(test, 1.0, cfg.margin_budget)
+    test_0 = summarize(test, 0.0, cfg.margin_budget)
+    test_2 = summarize(test, 2.0, cfg.margin_budget)
     if not coverage_ok:
         full = _pending_coverage(full)
         cost_0 = _pending_coverage(cost_0)
@@ -168,6 +170,10 @@ def _finish(cfg: Any, result: Any, coverage: list[dict[str, Any]], start_ms: int
                 "expectancy_r": full.get("expectancy_r"),
                 "expectancy_r_0x": cost_0.get("expectancy_r"),
                 "expectancy_r_2x": cost_2.get("expectancy_r"),
+                "test_trades": test_summary.get("trades"),
+                "test_expectancy_r_0x": test_0.get("expectancy_r"),
+                "test_expectancy_r": test_summary.get("expectancy_r"),
+                "test_expectancy_r_2x": test_2.get("expectancy_r"),
                 "profit_factor": full.get("profit_factor"),
                 "max_drawdown_pct": full.get("max_drawdown_pct"),
                 "sharpe_ratio": engine_sharpe,
