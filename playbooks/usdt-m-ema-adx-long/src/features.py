@@ -483,7 +483,7 @@ def build_replay_frame(symbol: str, start_ms: int, end_ms: int) -> tuple[Any, di
         raise DataCoverageError(f"{symbol}: replay frame is missing funding_rate")
     replay_bars = _bars_for_replay(bars)
     frame = _restore_kline_prices(frame, replay_bars)
-    frame = _fit_replay_prices(frame, native)
+    frame = _fit_replay_prices(frame, symbol if symbol in _PRICE_TICK else native)
     if len(frame) == 0:
         raise DataCoverageError(f"{symbol}: no valid OHLC bars remain after the funding join")
     frame = _restore_utc_index(frame)
@@ -553,11 +553,10 @@ def _fit_replay_prices(frame: Any, symbol: str) -> Any:
             keep.append(False)
             continue
         fitted_open, fitted_high, fitted_low, fitted_close = fitted
-        if (fitted_open, fitted_high, fitted_low, fitted_close) != (open_, high, low, close):
-            work.at[ts, "open"] = fitted_open
-            work.at[ts, "high"] = fitted_high
-            work.at[ts, "low"] = fitted_low
-            work.at[ts, "close"] = fitted_close
+        work.at[ts, "open"] = fitted_open
+        work.at[ts, "high"] = fitted_high
+        work.at[ts, "low"] = fitted_low
+        work.at[ts, "close"] = fitted_close
         keep.append(True)
     if keep and not all(keep):
         work = work.iloc[[i for i, ok in enumerate(keep) if ok]]

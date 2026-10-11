@@ -64,7 +64,10 @@ def align_ohlc_to_tick(
         h = max(o, c, h)
     if l <= 0 or h < l:
         return None
-    return (float(o), float(h), float(l), float(c))
+    places = max(0, -_decimal(tick).as_tuple().exponent)
+    def _emit(value: Decimal) -> float:
+        return float(f"{value:.{places}f}")
+    return (_emit(o), _emit(h), _emit(l), _emit(c))
 
 
 def funding_series_gap_ms(stamps: Sequence[int], max_gap_ms: int) -> int | None:

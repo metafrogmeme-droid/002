@@ -771,9 +771,18 @@ def _money(value: Any) -> float | None:
 
 
 def _price_text(value: float, instrument: Any) -> str:
+    """Format on the instrument grid with that exact precision.
+
+    ``format(Decimal, "f")`` drops trailing zeros, so 2345.50 becomes
+    precision 1 and the engine rejects it against an ETH precision of 2.
+    """
     tick = _num(instrument.price_increment)
     quantized = quantize_nearest(value, tick)
-    return format(quantized, "f")
+    precision = getattr(instrument, "price_precision", None)
+    if not isinstance(precision, int) or precision < 0:
+        text = format(tick, "f")
+        precision = len(text.split(".")[1]) if "." in text else 0
+    return f"{quantized:.{precision}f}"
 
 
 def _iso_ms(value: str) -> int:
