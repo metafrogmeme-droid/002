@@ -12,10 +12,28 @@ from typing import Sequence
 
 
 FUNDING_HOURS = (0, 8, 16)
+HOUR_MS = 60 * 60 * 1000
 # bitget_data funding_rate is the percent display of the decimal rate.
 # Public BTCUSDT settlement 0.00004 at 2026-10-09T16:00:00Z matched managed
 # funding_rate 0.004 on the bar whose funding_timestamp is that instant.
 MANAGED_FUNDING_PERCENT_SCALE = 100.0
+
+
+def coverage_tail_allowance_ms(bar_hours: int) -> int:
+    """How old the last closed bar may be at the window end.
+
+    One bar interval plus one hour. On 1H that is two hours, the same tail
+    the v2.1 coverage check used. A 4H bar that closed four hours before the
+    window end is still a complete bar for that window.
+    """
+    if bar_hours not in (1, 4):
+        raise ValueError("bar_hours must be 1 or 4")
+    return (bar_hours + 1) * HOUR_MS
+
+
+def kline_tail_covers(last_ms: int, end_ms: int, bar_hours: int) -> bool:
+    """True when the last kline timestamp sits inside the interval-sized tail."""
+    return last_ms >= end_ms - coverage_tail_allowance_ms(bar_hours)
 
 
 def funding_rate_from_managed(raw: float) -> float:

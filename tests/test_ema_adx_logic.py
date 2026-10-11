@@ -33,8 +33,10 @@ from risk import (  # noqa: E402
     exposure_hits_blackout,
     millis_from_bar_clock,
     ohlc_is_valid,
+    coverage_tail_allowance_ms,
     funding_page_ignores_window,
     funding_rate_from_managed,
+    kline_tail_covers,
     funding_series_gap_ms,
     in_funding_blackout,
     plan_long_size,
@@ -305,6 +307,21 @@ class RiskTests(unittest.TestCase):
         self.assertTrue(funding_page_ignores_window(1783814400000, 1791504000000, 1783814400000, 4 * 60 * 60 * 1000))
         # A page that actually starts before the requested end is usable.
         self.assertFalse(funding_page_ignores_window(1728432000000, 1733616000000, 1733616000000, 4 * 60 * 60 * 1000))
+
+    def test_coverage_tail_keeps_the_1h_rule_and_accepts_a_closed_4h_bar(self):
+        hour = 60 * 60 * 1000
+        end = int(datetime(2026, 4, 9, tzinfo=timezone.utc).timestamp() * 1000)
+        last_4h = int(datetime(2026, 4, 8, 20, tzinfo=timezone.utc).timestamp() * 1000)
+        self.assertEqual(coverage_tail_allowance_ms(1), 2 * hour)
+        self.assertEqual(coverage_tail_allowance_ms(4), 5 * hour)
+        for delta in range(-3, 4):
+            last = end - 2 * hour + delta
+            old_ok = last >= end - 2 * hour
+            self.assertEqual(kline_tail_covers(last, end, 1), old_ok)
+        self.assertFalse(kline_tail_covers(last_4h, end, 1))
+        self.assertTrue(kline_tail_covers(last_4h, end, 4))
+        self.assertTrue(kline_tail_covers(end - 5 * hour, end, 4))
+        self.assertFalse(kline_tail_covers(end - 5 * hour - 1, end, 4))
 
     def test_exposure_window_overlaps_funding(self):
         start = datetime(2026, 10, 9, 7, 0, tzinfo=timezone.utc)

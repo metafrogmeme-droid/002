@@ -16,12 +16,12 @@ try:
     from .features import DataCoverageError, build_replay_frame
     from .params import ConfigError, load_config
     from .report import activation_verdict, fill_identity, rule_trades, split_by_entry, summarize
-    from .risk import ClosedTrade
+    from .risk import ClosedTrade, kline_tail_covers
 except ImportError:
     from features import DataCoverageError, build_replay_frame
     from params import ConfigError, load_config
     from report import activation_verdict, fill_identity, rule_trades, split_by_entry, summarize
-    from risk import ClosedTrade
+    from risk import ClosedTrade, kline_tail_covers
 
 
 OUTPUT = Path("/workspace/output")
@@ -69,7 +69,7 @@ def _finish(cfg: Any, result: Any, coverage: list[dict[str, Any]], start_ms: int
     shutdowns = [
         trade for trade in _load_trades() if trade.reason_code == "BACKTEST_SHUTDOWN"
     ]
-    coverage_ok = _coverage_ok(coverage, start_ms, end_ms)
+    coverage_ok = _coverage_ok(coverage, start_ms, end_ms, cfg.bar_hours)
     full = summarize(trades, 1.0, cfg.margin_budget)
     cost_0 = summarize(trades, 0.0, cfg.margin_budget)
     cost_2 = summarize(trades, 2.0, cfg.margin_budget)
@@ -222,7 +222,9 @@ def _finish(cfg: Any, result: Any, coverage: list[dict[str, Any]], start_ms: int
     )
 
 
-def _coverage_ok(coverage: list[dict[str, Any]], start_ms: int, end_ms: int) -> bool:
+def _coverage_ok(
+    coverage: list[dict[str, Any]], start_ms: int, end_ms: int, bar_hours: int = 1
+) -> bool:
     if not coverage:
         return False
     for item in coverage:
@@ -232,7 +234,7 @@ def _coverage_ok(coverage: list[dict[str, Any]], start_ms: int, end_ms: int) -> 
         fund_last = item.get("funding_last_ms")
         if not all(isinstance(value, int) for value in (first, last, fund_first, fund_last)):
             return False
-        if first > start_ms + HOUR_MS or last < end_ms - 2 * HOUR_MS:
+        if first > start_ms + HOUR_MS or not kline_tail_covers(last, end_ms, bar_hours):
             return False
         if fund_first > start_ms + 24 * HOUR_MS or fund_last < end_ms - 24 * HOUR_MS:
             return False
