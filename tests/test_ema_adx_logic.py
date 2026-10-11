@@ -26,6 +26,8 @@ from params import ConfigError, load_config  # noqa: E402
 from report import activation_verdict, fill_identity  # noqa: E402
 from risk import (  # noqa: E402
     ClosedTrade,
+    _clamp_engine_bar,
+    _engine_units,
     align_ohlc_to_tick,
     expand_bar_to_prior_close,
     exposure_hits_blackout,
@@ -271,6 +273,19 @@ class RiskTests(unittest.TestCase):
         self.assertLessEqual(eth_low, eth_close)
         self.assertGreaterEqual(eth_high, eth_open)
         self.assertGreaterEqual(eth_high, eth_close)
+
+    def test_engine_round_that_puts_high_below_open_is_expanded(self):
+        # The pullback replay died on this check. These floats are already a
+        # valid print, but the engine's integer prices have high below open.
+        fixed = _clamp_engine_bar((100.01, 100.00, 99.90, 100.00), Decimal("0.01"), 2)
+        self.assertIsNotNone(fixed)
+        assert fixed is not None
+        opened, high, low, closed = fixed
+        self.assertGreaterEqual(_engine_units(high, 2), _engine_units(opened, 2))
+        self.assertGreaterEqual(_engine_units(high, 2), _engine_units(closed, 2))
+        self.assertLessEqual(_engine_units(low, 2), _engine_units(opened, 2))
+        self.assertLessEqual(_engine_units(low, 2), _engine_units(closed, 2))
+        self.assertTrue(ohlc_is_valid(opened, high, low, closed))
 
     def test_one_tick_gap_from_the_prior_close_stays_inside_the_bar(self):
         stitched = expand_bar_to_prior_close(100.02, 100.05, 100.02, 100.04, 100.01, 0.01)

@@ -51,9 +51,12 @@ def align_ohlc_to_tick(
     Every price is moved to the nearest tick. If that would put low above
     open or close, low and high are pulled back onto the same grid. The
     returned floats are then checked the way the replay engine rounds a
-    float onto the instrument precision (half away from zero). Off-tick
-    prints are not passed through. Nothing is interpolated and no strategy
-    threshold changes.
+    float onto the instrument precision (half away from zero). That second
+    rounding is what aborted the pullback replay with ``high was < open``
+    (and the cross replay with ``low was > open``): open can round up while
+    high rounds down. High is lifted and low is dropped to the extreme of
+    those integer units before the bar is emitted. Off-tick prints are not
+    passed through. Nothing is interpolated and no strategy threshold changes.
     """
     if not ohlc_is_valid(open_, high, low, close) or tick <= 0:
         return None
