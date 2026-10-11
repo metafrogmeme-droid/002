@@ -1,6 +1,10 @@
-# USDT-M EMA ADX Long (v2)
+# USDT-M EMA ADX Long (v2.1)
 
-Long-only trend Playbook for Bitget USDT-M perpetuals. Version label `v2`. v1 was the 5x package. v2 changes only the isolated-margin leverage hard cap, from 5x to 10x, and skips an order when that liquidation sits inside the stop. EMA, ADX, ATR percentile, volume, and the 2R target are unchanged.
+Long-only trend Playbook for Bitget USDT-M perpetuals. Version label `v2.1`. This is a bugfix of v2, not a strategy change. Strategy parameters are identical to v2: EMA(20)/EMA(50) cross, ADX at least 25, ATR percentile 20 to 80, volume 1.5 times the prior 20 bars, fixed 2R, 8 hour time stop, long only, isolated margin with a 10x cap, 15 USDT at the stop, and the same halt rules. Research switches stay at their defaults: entry style cross, exit style fixed 2R, 4H filter off, research side long, window label full. No candidate is enabled.
+
+The bugfix is in the live and fill path. Closed live trades update the daily realised loss, the cumulative realised loss, and the consecutive-loss count. The 8 hour clock starts at the fill, not at the limit submit. An unfilled limit that would rest across a funding window is cancelled with `ORDER_CANCEL_FUNDING_WINDOW`. Order size is never raised above the planned quantity. If a close profit cannot be read, new entries stop. Replay bars are placed on the instrument tick before the engine fills. Order prices keep the instrument precision, so an ETH price such as 2345.50 is not sent with the trailing zero stripped.
+
+v1 was the 5x package. v2 changed only the isolated-margin leverage hard cap, from 5x to 10x, and skips an order when that liquidation sits inside the stop. EMA, ADX, ATR percentile, volume, and the 2R target were unchanged then and stay unchanged in v2.1.
 
 This package does not claim a win rate, profit factor, Sharpe ratio, drawdown, or expectancy. Those numbers stay PENDING until a sandbox replay returns them from data. Do not activate live trading from this README.
 
@@ -108,7 +112,7 @@ scan → filter → trigger → order → manage → exit → log
 | size_step / min_qty | BTC 0.0001, ETH 0.01, SOL 0.1 | minTradeNum and sizeMultiplier | data |
 | min_notional_usdt | 5 | minTradeUSDT | data |
 | fee_tier_status | PENDING | Trade SDK has no fee-tier method; ACCESS-KEY is the GetAgent control-plane key | PENDING |
-| version_label | v2 | leverage cap only; signal parameters stay at the v1 values | user spec |
+| version_label | v2.1 | bugfix of v2; strategy parameters identical to v2 | user spec |
 
 ## Assumptions and what would falsify them
 
